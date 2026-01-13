@@ -61,23 +61,23 @@ export class KuiperBelt {
       positions[i * 3 + 1] = verticalOffset;
       positions[i * 3 + 2] = z;
 
-      // Color variation - mostly icy blue-gray
+      // Color variation - cooler, dimmer blue tones (distinct from asteroid belt)
       const colorVariation = Math.random();
-      if (colorVariation < 0.6) {
-        // Icy blue-gray
-        colors[i * 3] = 0.5 + Math.random() * 0.2;
-        colors[i * 3 + 1] = 0.5 + Math.random() * 0.2;
-        colors[i * 3 + 2] = 0.6 + Math.random() * 0.2;
-      } else if (colorVariation < 0.8) {
-        // Reddish (like some KBOs)
-        colors[i * 3] = 0.6 + Math.random() * 0.2;
-        colors[i * 3 + 1] = 0.4 + Math.random() * 0.1;
+      if (colorVariation < 0.7) {
+        // Dim icy blue (primary color)
+        colors[i * 3] = 0.3 + Math.random() * 0.1;
+        colors[i * 3 + 1] = 0.35 + Math.random() * 0.1;
+        colors[i * 3 + 2] = 0.5 + Math.random() * 0.15;
+      } else if (colorVariation < 0.85) {
+        // Very faint blue-gray
+        colors[i * 3] = 0.25 + Math.random() * 0.1;
+        colors[i * 3 + 1] = 0.3 + Math.random() * 0.1;
         colors[i * 3 + 2] = 0.4 + Math.random() * 0.1;
       } else {
-        // Bright icy
-        colors[i * 3] = 0.7 + Math.random() * 0.3;
-        colors[i * 3 + 1] = 0.7 + Math.random() * 0.3;
-        colors[i * 3 + 2] = 0.8 + Math.random() * 0.2;
+        // Subtle purple-blue
+        colors[i * 3] = 0.35 + Math.random() * 0.1;
+        colors[i * 3 + 1] = 0.3 + Math.random() * 0.1;
+        colors[i * 3 + 2] = 0.5 + Math.random() * 0.15;
       }
 
       // Random sizes

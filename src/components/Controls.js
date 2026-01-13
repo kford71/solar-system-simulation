@@ -19,6 +19,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 import { TIME_CONSTANTS, DISTANCE_SCALE } from '../data/planetData.js';
 import { AudioSystem } from './AudioSystem.js';
+import { dateToJulianDate, julianDateToDate } from '../utils/OrbitalMechanics.js';
 
 export class Controls {
   constructor(camera, renderer, scene, planets, sun, dwarfPlanets = []) {
@@ -50,6 +51,7 @@ export class Controls {
     // Time tracking
     this.simulatedTime = 0; // Days since start
     this.startDate = new Date(TIME_CONSTANTS.simulationStartDate);
+    this.currentJulianDate = dateToJulianDate(this.startDate); // Julian Date for orbital calculations
 
     // State
     this.raycaster = new THREE.Raycaster();
@@ -297,7 +299,7 @@ export class Controls {
   }
 
   /**
-   * Update time display
+   * Update time display and calculate Julian Date for orbital mechanics
    */
   updateTimeDisplay(deltaTime) {
     if (!this.settings.paused) {
@@ -308,6 +310,9 @@ export class Controls {
     // Calculate display date
     const displayDate = new Date(this.startDate);
     displayDate.setDate(displayDate.getDate() + this.simulatedTime);
+
+    // Calculate Julian Date for orbital mechanics
+    this.currentJulianDate = dateToJulianDate(displayDate);
 
     const dateEl = document.getElementById('sim-date');
     if (dateEl) {
@@ -320,6 +325,13 @@ export class Controls {
     if (slider && !slider.matches(':active')) {
       slider.value = Math.max(-36500, Math.min(36500, this.simulatedTime));
     }
+  }
+
+  /**
+   * Get current Julian Date for orbital calculations
+   */
+  getJulianDate() {
+    return this.currentJulianDate;
   }
 
   /**

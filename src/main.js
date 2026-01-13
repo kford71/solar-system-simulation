@@ -196,18 +196,19 @@ function animate() {
   const deltaTime = clock.getDelta();
   const elapsedTime = clock.getElapsedTime();
   const speedMultiplier = controls.getOrbitSpeed();
+  const julianDate = controls.getJulianDate();
 
   // Update sun animation (always animate even when paused)
   sun.update(deltaTime, elapsedTime);
 
-  // Update planet orbits and rotations
+  // Update planet orbits and rotations with accurate orbital mechanics
   planets.forEach(planet => {
-    planet.update(deltaTime, speedMultiplier, elapsedTime);
+    planet.update(deltaTime, speedMultiplier, elapsedTime, julianDate);
   });
 
-  // Update dwarf planets
+  // Update dwarf planets with accurate orbital mechanics
   dwarfPlanets.forEach(dwarf => {
-    dwarf.update(deltaTime, speedMultiplier, elapsedTime);
+    dwarf.update(deltaTime, speedMultiplier, elapsedTime, julianDate);
   });
 
   // Update asteroid belt

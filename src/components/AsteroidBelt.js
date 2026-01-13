@@ -112,14 +112,14 @@ export class AsteroidBelt {
       this.updateAsteroidMatrix(i);
     }
 
-    // Enable instance color for slight variations
+    // Enable instance color - warmer white-yellow tones for asteroid belt
     const colors = new Float32Array(this.data.count * 3);
     for (let i = 0; i < this.data.count; i++) {
-      // Slight gray/brown color variation
-      const shade = 0.3 + Math.random() * 0.4;
-      colors[i * 3] = shade + Math.random() * 0.1;     // R
-      colors[i * 3 + 1] = shade;                        // G
-      colors[i * 3 + 2] = shade - Math.random() * 0.1;  // B
+      // Warmer, brighter colors (white-yellow range)
+      const brightness = 0.5 + Math.random() * 0.4;
+      colors[i * 3] = brightness + Math.random() * 0.15;     // R - slightly warm
+      colors[i * 3 + 1] = brightness + Math.random() * 0.05; // G
+      colors[i * 3 + 2] = brightness * 0.85;                 // B - less blue for warmth
     }
     this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
 

@@ -13,7 +13,7 @@
 
 // Scale factors for visualization
 const DISTANCE_SCALE = 10; // AU to scene units
-const SIZE_SCALE = 0.5;    // Size multiplier for visibility
+const SIZE_SCALE = 0.8;    // Size multiplier for visibility (increased for better planet visibility)
 
 // Texture base URL from Solar System Scope (high quality textures)
 const TEXTURE_BASE = 'https://www.solarsystemscope.com/textures/download';
@@ -558,12 +558,12 @@ export const ASTEROID_BELT_DATA = {
 export const KUIPER_BELT_DATA = {
   innerRadius: 30 * DISTANCE_SCALE,   // Just beyond Neptune
   outerRadius: 50 * DISTANCE_SCALE,   // Extends far out
-  count: 2000,
+  count: 1500,                        // Reduced for less clutter
   minSize: 0.01,
-  maxSize: 0.05,
-  color: 0x6666aa,
-  verticalSpread: 2.0,  // More spread out than asteroid belt
-  opacity: 0.5
+  maxSize: 0.04,
+  color: 0x4455aa,                    // Cooler blue
+  verticalSpread: 2.0,                // More spread out than asteroid belt
+  opacity: 0.3                        // More transparent
 };
 
 // Time constants for simulation

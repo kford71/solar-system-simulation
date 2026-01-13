@@ -182,7 +182,8 @@ export class Sun {
     });
 
     this.coronaMesh = new THREE.Sprite(coronaMaterial);
-    this.coronaMesh.scale.set(this.data.radius * 5, this.data.radius * 5, 1);
+    // Reduced corona size to not bleed into inner planets
+    this.coronaMesh.scale.set(this.data.radius * 3, this.data.radius * 3, 1);
     this.group.add(this.coronaMesh);
   }
 
@@ -289,11 +290,12 @@ export class Sun {
     const textureFlare2 = this.createFlareTexture(64, 'hex');
 
     this.lensflare = new Lensflare();
-    this.lensflare.addElement(new LensflareElement(textureFlare0, 700, 0, new THREE.Color(0xffffff)));
-    this.lensflare.addElement(new LensflareElement(textureFlare1, 60, 0.6, new THREE.Color(0xffcc88)));
-    this.lensflare.addElement(new LensflareElement(textureFlare1, 70, 0.7, new THREE.Color(0xffaa66)));
-    this.lensflare.addElement(new LensflareElement(textureFlare2, 120, 0.9, new THREE.Color(0xffddaa)));
-    this.lensflare.addElement(new LensflareElement(textureFlare2, 70, 1.0, new THREE.Color(0xffffcc)));
+    // Much more subtle lens flare - reduced sizes and opacity
+    this.lensflare.addElement(new LensflareElement(textureFlare0, 200, 0, new THREE.Color(0xffffff)));
+    this.lensflare.addElement(new LensflareElement(textureFlare1, 30, 0.6, new THREE.Color(0xffcc88)));
+    this.lensflare.addElement(new LensflareElement(textureFlare1, 35, 0.7, new THREE.Color(0xffaa66)));
+    this.lensflare.addElement(new LensflareElement(textureFlare2, 50, 0.9, new THREE.Color(0xffddaa)));
+    this.lensflare.addElement(new LensflareElement(textureFlare2, 30, 1.0, new THREE.Color(0xffffcc)));
 
     this.group.add(this.lensflare);
   }
@@ -371,11 +373,11 @@ export class Sun {
     // Subtle rotation
     this.sunMesh.rotation.y += deltaTime * 0.05;
 
-    // Pulsate corona
-    const pulse = 1 + Math.sin(elapsedTime * 1.5) * 0.08;
+    // Pulsate corona (reduced size)
+    const pulse = 1 + Math.sin(elapsedTime * 1.5) * 0.05;
     this.coronaMesh.scale.set(
-      this.data.radius * 5 * pulse,
-      this.data.radius * 5 * pulse,
+      this.data.radius * 3 * pulse,
+      this.data.radius * 3 * pulse,
       1
     );
 

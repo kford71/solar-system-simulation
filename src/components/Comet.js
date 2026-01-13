@@ -29,9 +29,9 @@ export class Comet {
     this.orbitAngle = Math.random() * Math.PI * 2;
     this.tailParticles = [];
 
-    // Tail particle count
-    this.dustTailCount = 500;
-    this.ionTailCount = 300;
+    // Tail particle count (reduced for less visual clutter)
+    this.dustTailCount = 250;
+    this.ionTailCount = 150;
 
     this.init();
   }
@@ -161,10 +161,10 @@ export class Comet {
     const particleTexture = new THREE.CanvasTexture(canvas);
 
     const material = new THREE.PointsMaterial({
-      size: 0.8,
+      size: 0.4,              // Smaller particles for thinner tail
       vertexColors: true,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.35,          // Reduced opacity
       map: particleTexture,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -216,10 +216,10 @@ export class Comet {
     const particleTexture = new THREE.CanvasTexture(canvas);
 
     const material = new THREE.PointsMaterial({
-      size: 0.5,
+      size: 0.25,             // Smaller for thinner tail
       vertexColors: true,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.3,           // Reduced opacity
       map: particleTexture,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -321,9 +321,9 @@ export class Comet {
     // Update ion tail particles
     this.updateIonTail(awayFromSun, maxTailLength * 1.5);
 
-    // Update tail visibility based on distance
-    this.dustTail.material.opacity = 0.3 + (1 - normalizedDist) * 0.5;
-    this.ionTail.material.opacity = 0.2 + (1 - normalizedDist) * 0.5;
+    // Update tail visibility based on distance (more subtle range)
+    this.dustTail.material.opacity = 0.15 + (1 - normalizedDist) * 0.25;
+    this.ionTail.material.opacity = 0.1 + (1 - normalizedDist) * 0.25;
   }
 
   /**

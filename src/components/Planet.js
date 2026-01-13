@@ -4,7 +4,7 @@
  * Creates a planet with:
  * - Textured surface with proper lighting and normal maps
  * - Atmospheric glow effect
- * - Orbital motion around the Sun
+ * - Orbital motion around the Sun (accurate Keplerian mechanics)
  * - Axial rotation with proper tilt
  * - Optional rings (Saturn, Uranus)
  * - Multiple moons support
@@ -15,7 +15,8 @@
  */
 
 import * as THREE from 'three';
-import { MOON_DATA, ADDITIONAL_MOONS, CHARON_DATA } from '../data/planetData.js';
+import { MOON_DATA, ADDITIONAL_MOONS, CHARON_DATA, DISTANCE_SCALE } from '../data/planetData.js';
+import { calculatePlanetPosition, calculateMoonPosition, dateToJulianDate } from '../utils/OrbitalMechanics.js';
 
 export class Planet {
   constructor(data, textureLoader) {
@@ -26,10 +27,15 @@ export class Planet {
     this.orbitAngle = Math.random() * Math.PI * 2;
     this.rotationAngle = 0;
 
+    // Accurate orbital mechanics
+    this.currentJulianDate = null;
+    this.useAccurateOrbits = true;  // Use Keplerian calculations
+
     // Three.js objects
     this.orbitGroup = new THREE.Group();
     this.axisGroup = new THREE.Group();
     this.planetMesh = null;
+    this.planetGlow = null;  // Colored glow for visibility
     this.atmosphereMesh = null;
     this.cloudsMesh = null;
     this.ringMesh = null;
@@ -46,6 +52,9 @@ export class Planet {
     await this.createPlanetMesh();
     this.applyAxialTilt();
     this.createOrbitLine();
+
+    // Create subtle colored glow around all planets for better visibility
+    this.createPlanetGlow();
 
     // Create atmosphere if defined
     if (this.data.atmosphere) {
@@ -502,7 +511,7 @@ export class Planet {
   }
 
   /**
-   * Create the orbital path visualization
+   * Create the orbital path visualization with color-coded lines
    */
   createOrbitLine() {
     const points = [];
@@ -518,14 +527,66 @@ export class Planet {
     }
 
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+    // Color-code orbit lines to match planet color (subtle tint)
+    // Inner planets get thicker lines
+    const isInnerPlanet = this.data.distance < 20; // Mars and closer
+    const orbitColor = new THREE.Color(this.data.color).lerp(new THREE.Color(0x444466), 0.7);
+
     const material = new THREE.LineBasicMaterial({
-      color: this.data.isDwarfPlanet ? 0x664466 : 0x444466,
+      color: this.data.isDwarfPlanet ? 0x664466 : orbitColor,
       transparent: true,
-      opacity: this.data.isDwarfPlanet ? 0.2 : 0.3
+      opacity: this.data.isDwarfPlanet ? 0.25 : 0.4,
+      linewidth: isInnerPlanet ? 2 : 1 // Note: linewidth only works in some renderers
     });
 
     this.orbitLine = new THREE.Line(geometry, material);
     this.orbitLine.name = `${this.data.name}OrbitLine`;
+  }
+
+  /**
+   * Create a subtle colored glow around the planet
+   */
+  createPlanetGlow() {
+    const glowGeometry = new THREE.SphereGeometry(this.data.radius * 1.15, 32, 32);
+
+    const glowMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        glowColor: { value: new THREE.Color(this.data.color) },
+        intensity: { value: 0.4 }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 glowColor;
+        uniform float intensity;
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+        void main() {
+          vec3 viewDirection = normalize(-vPosition);
+          float fresnel = 1.0 - max(0.0, dot(viewDirection, vNormal));
+          fresnel = pow(fresnel, 3.0);
+          vec3 color = glowColor * fresnel * intensity;
+          float alpha = fresnel * intensity * 0.6;
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.planetGlow = new THREE.Mesh(glowGeometry, glowMaterial);
+    this.planetGlow.position.copy(this.planetMesh.position);
+    this.axisGroup.add(this.planetGlow);
   }
 
   /**
@@ -942,16 +1003,95 @@ export class Planet {
   }
 
   /**
+   * Set planet position for a specific Julian Date using accurate orbital mechanics
+   */
+  setPositionForDate(julianDate) {
+    this.currentJulianDate = julianDate;
+
+    if (this.useAccurateOrbits) {
+      const position = calculatePlanetPosition(this.data.name, julianDate);
+
+      if (position) {
+        // Convert AU to scene units and apply to planet position
+        // Note: We use x and y from orbital calc, mapping to x and z in 3D scene
+        this.planetMesh.position.x = position.x * DISTANCE_SCALE;
+        this.planetMesh.position.z = position.y * DISTANCE_SCALE;
+        // Small vertical offset based on orbital inclination
+        this.planetMesh.position.y = position.z * DISTANCE_SCALE;
+
+        // Store orbital angle for compatibility
+        this.orbitAngle = position.theta;
+
+        // Update glow position
+        if (this.planetGlow) {
+          this.planetGlow.position.copy(this.planetMesh.position);
+        }
+
+        // Update atmosphere position
+        if (this.atmosphereMesh) {
+          this.atmosphereMesh.position.copy(this.planetMesh.position);
+        }
+
+        // Update rings position
+        if (this.ringMesh) {
+          this.ringMesh.position.copy(this.planetMesh.position);
+        }
+
+        // Update clouds position
+        if (this.cloudsMesh) {
+          this.cloudsMesh.position.copy(this.planetMesh.position);
+        }
+
+        // Update Earth's Moon with accurate position
+        if (this.data.name === 'Earth') {
+          this.updateMoonForDate(julianDate);
+        }
+      }
+    }
+  }
+
+  /**
+   * Update Earth's Moon position for accurate phases
+   */
+  updateMoonForDate(julianDate) {
+    const moonData = this.moons.find(m => m.data.name === 'Moon');
+    if (!moonData) return;
+
+    const moonPos = calculateMoonPosition(julianDate);
+    if (moonPos) {
+      // Moon position is relative to Earth, scale appropriately
+      // Using a larger scale for visibility
+      const moonScale = 15; // Visual scale factor
+      moonData.mesh.position.x = moonPos.x * DISTANCE_SCALE * moonScale;
+      moonData.mesh.position.z = moonPos.y * DISTANCE_SCALE * moonScale;
+      moonData.mesh.position.y = moonPos.z * DISTANCE_SCALE * moonScale;
+
+      // Update moon phase in shader if available
+      if (moonData.mesh.material.uniforms && moonData.mesh.material.uniforms.phase) {
+        moonData.mesh.material.uniforms.phase.value = moonPos.phase;
+      }
+
+      // Store phase for info display
+      moonData.phase = moonPos.phase;
+    }
+  }
+
+  /**
    * Update orbital and rotational motion
    */
-  update(deltaTime, speedMultiplier = 1, elapsedTime = 0) {
-    // Orbital motion
-    const orbitalAngularVelocity = (2 * Math.PI) / (this.data.orbitalPeriod * 100);
-    this.orbitAngle += orbitalAngularVelocity * deltaTime * speedMultiplier;
+  update(deltaTime, speedMultiplier = 1, elapsedTime = 0, julianDate = null) {
+    // If Julian Date provided, use accurate orbital positioning
+    if (julianDate !== null && this.useAccurateOrbits) {
+      this.setPositionForDate(julianDate);
+    } else {
+      // Fallback to simple orbital motion
+      const orbitalAngularVelocity = (2 * Math.PI) / (this.data.orbitalPeriod * 100);
+      this.orbitAngle += orbitalAngularVelocity * deltaTime * speedMultiplier;
 
-    // Update orbital position
-    this.planetMesh.position.x = Math.cos(this.orbitAngle) * this.data.distance;
-    this.planetMesh.position.z = Math.sin(this.orbitAngle) * this.data.distance;
+      // Update orbital position
+      this.planetMesh.position.x = Math.cos(this.orbitAngle) * this.data.distance;
+      this.planetMesh.position.z = Math.sin(this.orbitAngle) * this.data.distance;
+    }
 
     // Rotation
     const rotationDirection = this.data.rotationPeriod > 0 ? 1 : -1;
@@ -968,6 +1108,11 @@ export class Planet {
     // Update Jupiter's time uniform for GRS animation
     if (this.jupiterTimeUniform) {
       this.jupiterTimeUniform.value = elapsedTime;
+    }
+
+    // Update glow position
+    if (this.planetGlow) {
+      this.planetGlow.position.copy(this.planetMesh.position);
     }
 
     // Update atmosphere position and sun direction
@@ -1032,6 +1177,10 @@ export class Planet {
       if (this.planetMesh.material.map) {
         this.planetMesh.material.map.dispose();
       }
+    }
+    if (this.planetGlow) {
+      this.planetGlow.geometry.dispose();
+      this.planetGlow.material.dispose();
     }
     if (this.atmosphereMesh) {
       this.atmosphereMesh.geometry.dispose();
