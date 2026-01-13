@@ -15,8 +15,9 @@
  */
 
 import * as THREE from 'three';
-import { MOON_DATA, ADDITIONAL_MOONS, CHARON_DATA, DISTANCE_SCALE } from '../data/planetData.js';
+import { MOON_DATA, ADDITIONAL_MOONS, CHARON_DATA, DISTANCE_SCALE, ATMOSPHERE_CONFIG, MOON_TEXTURES } from '../data/planetData.js';
 import { calculatePlanetPosition, calculateMoonPosition, dateToJulianDate } from '../utils/OrbitalMechanics.js';
+import { AtmosphereShader } from '../shaders/AtmosphereShader.js';
 
 export class Planet {
   constructor(data, textureLoader) {
@@ -56,10 +57,8 @@ export class Planet {
     // Create subtle colored glow around all planets for better visibility
     this.createPlanetGlow();
 
-    // Create atmosphere if defined
-    if (this.data.atmosphere) {
-      this.createAtmosphere();
-    }
+    // Create Fresnel atmosphere effect if this planet has one configured
+    this.createFresnelAtmosphere();
 
     if (this.data.hasRings) {
       await this.createRings();
@@ -352,13 +351,15 @@ export class Planet {
   }
 
   /**
-   * Create material with albedo-based lighting
+   * Create material with albedo-based lighting and PBR normal mapping
    * Higher albedo planets appear brighter when lit by the Sun
    * Mercury (albedo 0.068) will appear notably darker than Venus (albedo 0.77)
+   * Normal maps add surface detail for rocky bodies
    */
   async createAlbedoMaterial() {
     let texture = null;
     let normalMap = null;
+    let specularMap = null;
 
     // Load main texture
     if (this.data.textureUrl) {
@@ -369,10 +370,19 @@ export class Planet {
       }
     }
 
-    // Load normal map
+    // Load normal map for surface detail
     if (this.data.normalMapUrl) {
       try {
         normalMap = await this.loadTexture(this.data.normalMapUrl);
+      } catch (e) {
+        // Silently ignore - will use vertex normals
+      }
+    }
+
+    // Load specular map (for Earth's oceans)
+    if (this.data.specularMapUrl) {
+      try {
+        specularMap = await this.loadTexture(this.data.specularMapUrl);
       } catch (e) {
         // Silently ignore
       }
@@ -381,13 +391,21 @@ export class Planet {
     // Get albedo value (default to 0.3 if not specified)
     const albedo = this.data.albedo !== undefined ? this.data.albedo : 0.3;
 
-    // Create shader material with albedo-based lighting
+    // Determine normal map strength based on planet type
+    // Rocky planets get stronger normal mapping for visible terrain
+    const isRocky = ['Mercury', 'Mars'].includes(this.data.name);
+    const normalScale = isRocky ? 1.5 : 1.0;
+
+    // Create shader material with albedo-based lighting and normal mapping
     return new THREE.ShaderMaterial({
       uniforms: {
         planetTexture: { value: texture },
         normalMap: { value: normalMap },
+        specularMap: { value: specularMap },
         hasTexture: { value: texture !== null },
         hasNormalMap: { value: normalMap !== null },
+        hasSpecularMap: { value: specularMap !== null },
+        normalScale: { value: normalScale },
         baseColor: { value: new THREE.Color(this.data.color) },
         albedo: { value: albedo },
         sunDirection: { value: new THREE.Vector3(1, 0, 0) }
@@ -397,10 +415,25 @@ export class Planet {
         varying vec3 vNormal;
         varying vec3 vWorldPosition;
         varying vec3 vViewPosition;
+        varying vec3 vTangent;
+        varying vec3 vBitangent;
 
         void main() {
           vUv = uv;
           vNormal = normalize(normalMatrix * normal);
+
+          // Calculate tangent and bitangent for normal mapping on sphere
+          // For a sphere, we can derive tangent from the position
+          vec3 pos = normalize(position);
+          vec3 tangent = normalize(cross(vec3(0.0, 1.0, 0.0), pos));
+          if (length(tangent) < 0.001) {
+            tangent = normalize(cross(vec3(1.0, 0.0, 0.0), pos));
+          }
+          vec3 bitangent = normalize(cross(pos, tangent));
+
+          vTangent = normalize(normalMatrix * tangent);
+          vBitangent = normalize(normalMatrix * bitangent);
+
           vec4 worldPos = modelMatrix * vec4(position, 1.0);
           vWorldPosition = worldPos.xyz;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -411,8 +444,11 @@ export class Planet {
       fragmentShader: `
         uniform sampler2D planetTexture;
         uniform sampler2D normalMap;
+        uniform sampler2D specularMap;
         uniform bool hasTexture;
         uniform bool hasNormalMap;
+        uniform bool hasSpecularMap;
+        uniform float normalScale;
         uniform vec3 baseColor;
         uniform float albedo;
         uniform vec3 sunDirection;
@@ -421,6 +457,8 @@ export class Planet {
         varying vec3 vNormal;
         varying vec3 vWorldPosition;
         varying vec3 vViewPosition;
+        varying vec3 vTangent;
+        varying vec3 vBitangent;
 
         void main() {
           // Get base color from texture or fallback
@@ -431,28 +469,63 @@ export class Planet {
             surfaceColor = baseColor;
           }
 
-          // Get normal (optionally from normal map)
+          // Get normal - apply normal map if available
           vec3 normal = normalize(vNormal);
+
+          if (hasNormalMap) {
+            // Sample normal map and convert from [0,1] to [-1,1]
+            vec3 mapNormal = texture2D(normalMap, vUv).rgb * 2.0 - 1.0;
+
+            // Apply normal scale for intensity control
+            mapNormal.xy *= normalScale;
+            mapNormal = normalize(mapNormal);
+
+            // Transform from tangent space to view space using TBN matrix
+            mat3 TBN = mat3(
+              normalize(vTangent),
+              normalize(vBitangent),
+              normalize(vNormal)
+            );
+            normal = normalize(TBN * mapNormal);
+          }
+
+          // View direction for specular
+          vec3 viewDir = normalize(vViewPosition);
 
           // Calculate lighting
           float sunDot = dot(normal, sunDirection);
 
           // Diffuse lighting with albedo affecting brightness
-          // Albedo determines how much light the surface reflects
-          // Scale from 0.068 (Mercury) to 0.77 (Venus)
           float ambientLight = 0.08;  // Very dim ambient
           float diffuse = max(0.0, sunDot);
 
           // Apply albedo to affect overall brightness
-          // Normalize albedo effect: Mercury (0.068) is very dark, Venus (0.77) is brightest
-          // Use a scaled range so differences are visible but not extreme
           float albedoFactor = 0.4 + (albedo * 0.8);  // Range: 0.45 to 1.02
+
+          // Calculate specular highlight (for shiny surfaces like oceans)
+          float specular = 0.0;
+          float roughness = 0.9;  // Default roughness (matte)
+
+          if (hasSpecularMap) {
+            // Specular map: white = water (shiny), black = land (rough)
+            float specMask = texture2D(specularMap, vUv).r;
+            roughness = 1.0 - specMask * 0.7;  // Water is less rough
+
+            // Blinn-Phong specular for ocean highlights
+            vec3 halfDir = normalize(sunDirection + viewDir);
+            float specAngle = max(0.0, dot(normal, halfDir));
+            float shininess = mix(8.0, 64.0, specMask);  // Shinier where water
+            specular = pow(specAngle, shininess) * specMask * 0.5;
+          }
 
           // Final lighting calculation
           float lighting = ambientLight + (diffuse * albedoFactor);
 
           // Apply lighting to surface color
           vec3 finalColor = surfaceColor * lighting;
+
+          // Add specular highlight (white)
+          finalColor += vec3(1.0, 1.0, 0.95) * specular * diffuse;
 
           // Slight boost to prevent completely black dark sides
           finalColor = max(finalColor, surfaceColor * 0.03);
@@ -464,100 +537,42 @@ export class Planet {
   }
 
   /**
-   * Create atmospheric glow effect with scattering
+   * Create Fresnel-based atmospheric glow effect
+   * Uses ATMOSPHERE_CONFIG for per-planet settings
    */
-  createAtmosphere() {
-    const atmoData = this.data.atmosphere;
+  createFresnelAtmosphere() {
+    const config = ATMOSPHERE_CONFIG[this.data.name];
+    if (!config) return null;  // No atmosphere for this body
+
+    // Create slightly larger sphere for atmosphere
     const atmosphereGeometry = new THREE.SphereGeometry(
-      this.data.radius * atmoData.scale,
+      this.data.radius * config.scale,
       64,
       64
     );
 
-    // Store sun direction uniform for scattering effect
-    this.atmosphereSunDirection = { value: new THREE.Vector3(1, 0, 0) };
-
-    // Determine if this planet should have enhanced scattering
-    const hasEnhancedScattering = this.data.name === 'Earth' || this.data.name === 'Venus';
-    const scatteringStrength = hasEnhancedScattering ? 0.6 : 0.3;
-
-    // Custom shader for atmospheric glow with scattering
     const atmosphereMaterial = new THREE.ShaderMaterial({
+      vertexShader: AtmosphereShader.vertexShader,
+      fragmentShader: AtmosphereShader.fragmentShader,
       uniforms: {
-        atmosphereColor: { value: new THREE.Color(atmoData.color) },
-        intensity: { value: atmoData.opacity },
-        sunDirection: this.atmosphereSunDirection,
-        scatterStrength: { value: scatteringStrength }
+        atmosphereColor: { value: new THREE.Color(...config.color) },
+        atmosphereIntensity: { value: config.intensity },
+        atmospherePower: { value: config.power },
+        atmosphereOpacity: { value: config.opacity }
       },
-      vertexShader: `
-        varying vec3 vNormal;
-        varying vec3 vPosition;
-        varying vec3 vWorldNormal;
-        varying vec3 vWorldPosition;
-
-        void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
-          vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
-          vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 atmosphereColor;
-        uniform float intensity;
-        uniform vec3 sunDirection;
-        uniform float scatterStrength;
-
-        varying vec3 vNormal;
-        varying vec3 vPosition;
-        varying vec3 vWorldNormal;
-        varying vec3 vWorldPosition;
-
-        void main() {
-          // Fresnel effect - glow stronger at edges
-          vec3 viewDirection = normalize(-vPosition);
-          float fresnel = 1.0 - max(0.0, dot(viewDirection, vNormal));
-          fresnel = pow(fresnel, 2.0);
-
-          // Calculate sun angle for scattering
-          float sunDot = dot(vWorldNormal, sunDirection);
-
-          // Terminator region (where day meets night)
-          float terminator = 1.0 - abs(sunDot);
-          terminator = pow(terminator, 3.0);
-
-          // Sunset/sunrise colors - orange/red at terminator
-          vec3 scatterColor = vec3(1.0, 0.5, 0.2);  // Orange-red
-          vec3 dayColor = atmosphereColor;
-
-          // Blend scatter color at terminator
-          float scatterAmount = terminator * scatterStrength * fresnel;
-
-          // Base atmosphere with scattering
-          vec3 finalColor = dayColor * fresnel * intensity * 2.0;
-
-          // Add warm scattering at the terminator (limb)
-          finalColor += scatterColor * scatterAmount * 1.5;
-
-          // Enhance glow on the sunlit side edge
-          float sunlitEdge = max(0.0, sunDot) * fresnel;
-          finalColor += dayColor * sunlitEdge * 0.3;
-
-          float alpha = fresnel * intensity + scatterAmount * 0.5;
-
-          gl_FragColor = vec4(finalColor, alpha);
-        }
-      `,
+      side: THREE.BackSide,       // Render inside of sphere
       transparent: true,
-      side: THREE.BackSide,
       blending: THREE.AdditiveBlending,
-      depthWrite: false
+      depthWrite: false           // Don't occlude planet
     });
 
     this.atmosphereMesh = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
-    this.atmosphereMesh.position.copy(this.planetMesh.position);
-    this.axisGroup.add(this.atmosphereMesh);
+    this.atmosphereMesh.name = `${this.data.name}_atmosphere`;
+
+    // Add to planet mesh so it moves with planet
+    this.planetMesh.add(this.atmosphereMesh);
+
+    return this.atmosphereMesh;
   }
 
   /**
@@ -1043,20 +1058,34 @@ export class Planet {
   }
 
   /**
-   * Create a single moon
+   * Create a single moon with Keplerian orbital mechanics and PBR materials
    */
   async createSingleMoon(moonData) {
     const moonGeometry = new THREE.SphereGeometry(moonData.radius, 32, 32);
 
     let moonMaterial;
     let moonTexture = null;
+    let normalMap = null;
 
-    // Try to load texture
-    if (moonData.textureUrl) {
+    // Check MOON_TEXTURES for high-quality textures first
+    const textureConfig = MOON_TEXTURES[moonData.name];
+
+    // Try to load diffuse texture
+    const textureUrl = textureConfig?.diffuse || moonData.textureUrl;
+    if (textureUrl) {
       try {
-        moonTexture = await this.loadTexture(moonData.textureUrl);
+        moonTexture = await this.loadTexture(textureUrl);
       } catch (e) {
         // Use color fallback
+      }
+    }
+
+    // Try to load normal map if available
+    if (textureConfig?.normal) {
+      try {
+        normalMap = await this.loadTexture(textureConfig.normal);
+      } catch (e) {
+        // Silently ignore
       }
     }
 
@@ -1064,8 +1093,22 @@ export class Planet {
     if (moonData.name === 'Moon' && moonData.parent === 'Earth') {
       moonMaterial = this.createMoonPhaseMaterial(moonTexture, moonData.color);
     } else {
-      const materialOptions = { color: moonData.color };
-      if (moonTexture) materialOptions.map = moonTexture;
+      // Create PBR-style material for other moons
+      const materialOptions = {
+        color: moonTexture ? 0xffffff : moonData.color,
+        roughness: 1.0,   // Rocky/icy surfaces are matte
+        metalness: 0.0    // Non-metallic
+      };
+
+      if (moonTexture) {
+        materialOptions.map = moonTexture;
+      }
+
+      if (normalMap) {
+        materialOptions.normalMap = normalMap;
+        materialOptions.normalScale = new THREE.Vector2(1.0, 1.0);
+      }
+
       moonMaterial = new THREE.MeshStandardMaterial(materialOptions);
     }
 
@@ -1080,67 +1123,121 @@ export class Planet {
       parent: this.data.name
     };
 
-    // Create pivot for orbit
+    // Create pivot for orbit - this will be tilted for inclination
     const moonPivot = new THREE.Group();
     moonPivot.position.copy(this.planetMesh.position);
-    moonPivot.add(moonMesh);
 
-    // Position moon at orbital distance
+    // Create an inner orbit group for inclination
+    const orbitPlane = new THREE.Group();
+    moonPivot.add(orbitPlane);
+
+    // Apply orbital inclination
+    const inclination = moonData.inclination || 0;
+    const inclinationRad = THREE.MathUtils.degToRad(inclination);
+    orbitPlane.rotation.x = inclinationRad;
+
+    orbitPlane.add(moonMesh);
+
+    // Position moon at orbital distance (semi-major axis scaled)
     moonMesh.position.x = moonData.distance;
 
-    // Create atmosphere for moon if defined (e.g., Titan)
+    // Create Fresnel atmosphere for moon if defined in ATMOSPHERE_CONFIG (e.g., Titan, Triton)
     let atmosphereMesh = null;
-    if (moonData.atmosphere) {
+    const moonAtmoConfig = ATMOSPHERE_CONFIG[moonData.name];
+    if (moonAtmoConfig) {
       const atmoGeom = new THREE.SphereGeometry(
-        moonData.radius * moonData.atmosphere.scale,
+        moonData.radius * moonAtmoConfig.scale,
         32, 32
       );
       const atmoMat = new THREE.ShaderMaterial({
+        vertexShader: AtmosphereShader.vertexShader,
+        fragmentShader: AtmosphereShader.fragmentShader,
         uniforms: {
-          atmosphereColor: { value: new THREE.Color(moonData.atmosphere.color) },
-          intensity: { value: moonData.atmosphere.opacity }
+          atmosphereColor: { value: new THREE.Color(...moonAtmoConfig.color) },
+          atmosphereIntensity: { value: moonAtmoConfig.intensity },
+          atmospherePower: { value: moonAtmoConfig.power },
+          atmosphereOpacity: { value: moonAtmoConfig.opacity }
         },
-        vertexShader: `
-          varying vec3 vNormal;
-          varying vec3 vPosition;
-          void main() {
-            vNormal = normalize(normalMatrix * normal);
-            vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 atmosphereColor;
-          uniform float intensity;
-          varying vec3 vNormal;
-          varying vec3 vPosition;
-          void main() {
-            vec3 viewDirection = normalize(-vPosition);
-            float fresnel = 1.0 - max(0.0, dot(viewDirection, vNormal));
-            fresnel = pow(fresnel, 2.0);
-            vec3 color = atmosphereColor * fresnel * intensity * 2.0;
-            float alpha = fresnel * intensity;
-            gl_FragColor = vec4(color, alpha);
-          }
-        `,
-        transparent: true,
         side: THREE.BackSide,
+        transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       });
       atmosphereMesh = new THREE.Mesh(atmoGeom, atmoMat);
+      atmosphereMesh.name = `${moonData.name}_atmosphere`;
       moonMesh.add(atmosphereMesh);
     }
 
     this.axisGroup.add(moonPivot);
 
+    // Return moon object with Keplerian orbital parameters
     return {
       mesh: moonMesh,
       pivot: moonPivot,
+      orbitPlane: orbitPlane,
       data: moonData,
-      orbitAngle: Math.random() * Math.PI * 2,
+      // Initialize orbital state
+      meanAnomaly: Math.random() * Math.PI * 2,  // Random starting position
+      orbitAngle: Math.random() * Math.PI * 2,   // For backward compatibility
+      // Keplerian elements
+      semiMajorAxis: moonData.distance,
+      eccentricity: moonData.eccentricity || 0,
+      inclination: inclination,
+      retrograde: moonData.retrograde || false,
+      orbitalPeriod: moonData.orbitalPeriod || 1,
       atmosphereMesh
     };
+  }
+
+  /**
+   * Solve Kepler's equation for moon orbits
+   * M = E - e*sin(E)
+   */
+  solveKeplerEquation(meanAnomaly, eccentricity) {
+    // For nearly circular orbits, return mean anomaly
+    if (eccentricity < 0.001) {
+      return meanAnomaly;
+    }
+
+    // Newton-Raphson iteration
+    let E = meanAnomaly + eccentricity * Math.sin(meanAnomaly);
+    const tolerance = 1e-6;
+    let iterations = 0;
+    const maxIterations = 10;
+
+    while (iterations < maxIterations) {
+      const dE = (E - eccentricity * Math.sin(E) - meanAnomaly) / (1 - eccentricity * Math.cos(E));
+      E -= dE;
+      if (Math.abs(dE) < tolerance) break;
+      iterations++;
+    }
+
+    return E;
+  }
+
+  /**
+   * Calculate moon position using Keplerian orbital mechanics
+   */
+  calculateMoonPosition(moon) {
+    const e = moon.eccentricity;
+    const a = moon.semiMajorAxis;
+
+    // Solve Kepler's equation
+    const E = this.solveKeplerEquation(moon.meanAnomaly, e);
+
+    // Calculate true anomaly
+    const sinNu = Math.sqrt(1 - e * e) * Math.sin(E) / (1 - e * Math.cos(E));
+    const cosNu = (Math.cos(E) - e) / (1 - e * Math.cos(E));
+    const trueAnomaly = Math.atan2(sinNu, cosNu);
+
+    // Calculate distance from parent (radius)
+    const r = a * (1 - e * Math.cos(E));
+
+    // Position in orbital plane (before inclination is applied by orbitPlane group)
+    const x = r * Math.cos(trueAnomaly);
+    const z = r * Math.sin(trueAnomaly);
+
+    return { x, z, trueAnomaly };
   }
 
   /**
@@ -1236,10 +1333,7 @@ export class Planet {
           this.planetGlow.position.copy(this.planetMesh.position);
         }
 
-        // Update atmosphere position
-        if (this.atmosphereMesh) {
-          this.atmosphereMesh.position.copy(this.planetMesh.position);
-        }
+        // Atmosphere is a child of planetMesh, moves automatically
 
         // Update rings position
         if (this.ringMesh) {
@@ -1324,16 +1418,7 @@ export class Planet {
       this.planetGlow.position.copy(this.planetMesh.position);
     }
 
-    // Update atmosphere position and sun direction
-    if (this.atmosphereMesh) {
-      this.atmosphereMesh.position.copy(this.planetMesh.position);
-
-      // Update sun direction for atmospheric scattering
-      if (this.atmosphereSunDirection) {
-        const sunDir = new THREE.Vector3(-this.planetMesh.position.x, 0, -this.planetMesh.position.z).normalize();
-        this.atmosphereSunDirection.value.copy(sunDir);
-      }
-    }
+    // Atmosphere mesh is a child of planetMesh, so it moves automatically
 
     // Update rings
     if (this.ringMesh) {
@@ -1346,18 +1431,37 @@ export class Planet {
       this.cloudsMesh.rotation.y += rotationSpeed * 1.15;
     }
 
-    // Update moons
+    // Update moons with Keplerian orbital mechanics
     this.moons.forEach(moon => {
+      // Keep pivot centered on planet
       moon.pivot.position.copy(this.planetMesh.position);
 
-      const moonOrbitalVelocity = (2 * Math.PI) / (moon.data.orbitalPeriod * 100);
-      moon.orbitAngle += moonOrbitalVelocity * deltaTime * speedMultiplier;
+      // Calculate mean motion (radians per day, scaled for simulation)
+      // Using 100 as the time scale factor for visibility
+      const meanMotion = (2 * Math.PI) / (moon.orbitalPeriod * 100);
 
-      moon.mesh.position.x = Math.cos(moon.orbitAngle) * moon.data.distance;
-      moon.mesh.position.z = Math.sin(moon.orbitAngle) * moon.data.distance;
+      // Update mean anomaly - retrograde moons orbit backwards
+      const direction = moon.retrograde ? -1 : 1;
+      moon.meanAnomaly += meanMotion * deltaTime * speedMultiplier * direction;
 
-      // Tidally locked rotation
-      moon.mesh.rotation.y = moon.orbitAngle;
+      // Normalize mean anomaly to [0, 2π]
+      moon.meanAnomaly = moon.meanAnomaly % (2 * Math.PI);
+      if (moon.meanAnomaly < 0) moon.meanAnomaly += 2 * Math.PI;
+
+      // Calculate position using Keplerian mechanics
+      const pos = this.calculateMoonPosition(moon);
+
+      // Apply position to moon mesh
+      moon.mesh.position.x = pos.x;
+      moon.mesh.position.z = pos.z;
+      moon.mesh.position.y = 0;  // Y is handled by orbitPlane inclination
+
+      // Update orbit angle for backward compatibility
+      moon.orbitAngle = pos.trueAnomaly;
+
+      // Tidally locked rotation - moon always faces planet
+      // For retrograde moons, this still works because the orbit direction is handled by meanAnomaly
+      moon.mesh.rotation.y = pos.trueAnomaly + Math.PI;
 
       // Update moon phase shader if this is Earth's Moon
       if (moon.mesh.material.uniforms && moon.mesh.material.uniforms.sunDirection) {

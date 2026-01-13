@@ -23,14 +23,18 @@ import { AudioSystem } from './AudioSystem.js';
 import { dateToJulianDate, julianDateToDate } from '../utils/OrbitalMechanics.js';
 
 export class Controls {
-  constructor(camera, renderer, scene, planets, sun, dwarfPlanets = [], comet = null) {
+  constructor(camera, renderer, scene, planets, sun, dwarfPlanets = [], majorAsteroids = [], spacecraft = [], comet = null, asteroidBelt = null, kuiperBelt = null) {
     this.camera = camera;
     this.renderer = renderer;
     this.scene = scene;
     this.planets = planets;
     this.dwarfPlanets = dwarfPlanets;
+    this.majorAsteroids = majorAsteroids;
+    this.spacecraft = spacecraft;
     this.sun = sun;
     this.comet = comet;
+    this.asteroidBelt = asteroidBelt;
+    this.kuiperBelt = kuiperBelt;
 
     // Settings
     this.settings = {
@@ -38,17 +42,32 @@ export class Controls {
       showLabels: true,
       showOrbits: true,
       showMinimap: true,
+      showSpacecraft: true,
+      showDwarfPlanets: true,
+      showAsteroids: true,
+      showMoons: true,
+      showBelts: true,
+      showRings: true,
+      showComet: true,
+      showEvents: true,
+      showAtmospheres: true,
+      showLensFlare: true,
       paused: false,
       focusedPlanet: 'None',
       // Audio settings
       audioMuted: true,
       masterVolume: 0.5,
       ambientVolume: 0.3,
-      uiVolume: 0.5
+      uiVolume: 0.5,
+      musicVolume: 0.3,
+      musicMode: 'off'
     };
 
-    // Audio system
+    // Audio system (legacy - kept for backward compatibility)
     this.audioSystem = new AudioSystem();
+
+    // New AudioManager reference (set via setAudioManager)
+    this.audioManager = null;
 
     // Time tracking
     this.simulatedTime = 0; // Days since start
@@ -114,6 +133,125 @@ export class Controls {
     this.createNotificationContainer();
   }
 
+  /**
+   * Set the new AudioManager (called from main.js after audio init)
+   */
+  setAudioManager(audioManager) {
+    this.audioManager = audioManager;
+    // Sync settings
+    if (audioManager) {
+      audioManager.setMuted(this.settings.audioMuted);
+      audioManager.setMasterVolume(this.settings.masterVolume);
+      audioManager.setAmbientVolume(this.settings.ambientVolume);
+      audioManager.setUIVolume(this.settings.uiVolume);
+    }
+  }
+
+  // ==================== AUDIO HELPER METHODS ====================
+
+  /**
+   * Play hover sound using AudioManager (preferred) or legacy AudioSystem
+   */
+  playHoverSound() {
+    if (this.audioManager) {
+      this.audioManager.playHover();
+    } else if (this.audioSystem) {
+      this.playHoverSound();
+    }
+  }
+
+  /**
+   * Play select/click sound
+   */
+  playSelectSound(objectName = null) {
+    if (this.audioManager) {
+      this.audioManager.playSelect(objectName);
+    } else if (this.audioSystem) {
+      this.playSelectSound(objectName);
+    }
+  }
+
+  /**
+   * Play focus sound (when focusing on a planet)
+   */
+  playFocusSound(objectName = null) {
+    if (this.audioManager) {
+      this.audioManager.playFocus(objectName);
+    } else if (this.audioSystem) {
+      this.playFocusSound(objectName);
+    }
+  }
+
+  /**
+   * Toggle mute state
+   */
+  toggleAudioMute() {
+    if (this.audioManager) {
+      return this.audioManager.toggleMute();
+    } else if (this.audioSystem) {
+      return this.audioSystem.toggleMute();
+    }
+    return this.settings.audioMuted;
+  }
+
+  /**
+   * Set mute state
+   */
+  setAudioMuted(muted) {
+    if (this.audioManager) {
+      this.audioManager.setMuted(muted);
+    } else if (this.audioSystem) {
+      if (muted) {
+        this.audioSystem.mute();
+      } else {
+        this.audioSystem.unmute();
+      }
+    }
+  }
+
+  /**
+   * Set master volume (0-1)
+   */
+  setMasterVolume(value) {
+    if (this.audioManager) {
+      this.audioManager.setMasterVolume(value);
+    } else if (this.audioSystem) {
+      this.audioSystem.setMasterVolume(value);
+    }
+  }
+
+  /**
+   * Set ambient volume (0-1)
+   */
+  setAmbientVolume(value) {
+    if (this.audioManager) {
+      this.audioManager.setAmbientVolume(value);
+    } else if (this.audioSystem) {
+      this.audioSystem.setAmbientVolume(value);
+    }
+  }
+
+  /**
+   * Set UI sound volume (0-1)
+   */
+  setUISoundVolume(value) {
+    if (this.audioManager) {
+      this.audioManager.setUIVolume(value);
+    } else if (this.audioSystem) {
+      this.audioSystem.setUIVolume(value);
+    }
+  }
+
+  setMusicVolume(value) {
+    if (this.audioManager) {
+      this.audioManager.setMusicVolume(value);
+    }
+  }
+
+  updateMusicControls(mode) {
+    // Placeholder for future music mode UI updates
+  }
+
   setupOrbitControls() {
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbitControls.enableDamping = true;
@@ -144,6 +282,26 @@ export class Controls {
       .onChange((value) => this.toggleOrbits(value));
     displayFolder.add(this.settings, 'showMinimap').name('Show Mini-map')
       .onChange((value) => this.toggleMinimap(value));
+    displayFolder.add(this.settings, 'showSpacecraft').name('Show Spacecraft')
+      .onChange((value) => this.toggleSpacecraft(value));
+    displayFolder.add(this.settings, 'showDwarfPlanets').name('Show Dwarf Planets')
+      .onChange((value) => this.toggleDwarfPlanets(value));
+    displayFolder.add(this.settings, 'showAsteroids').name('Show Asteroids')
+      .onChange((value) => this.toggleAsteroids(value));
+    displayFolder.add(this.settings, 'showMoons').name('Show Moons')
+      .onChange((value) => this.toggleMoons(value));
+    displayFolder.add(this.settings, 'showBelts').name('Show Belts')
+      .onChange((value) => this.toggleBelts(value));
+    displayFolder.add(this.settings, 'showRings').name('Show Rings')
+      .onChange((value) => this.toggleRings(value));
+    displayFolder.add(this.settings, 'showComet').name('Show Comet')
+      .onChange((value) => this.toggleComet(value));
+    displayFolder.add(this.settings, 'showEvents').name('Show Events')
+      .onChange((value) => this.toggleEvents(value));
+    displayFolder.add(this.settings, 'showAtmospheres').name('Show Atmospheres')
+      .onChange((value) => this.toggleAtmospheres(value));
+    displayFolder.add(this.settings, 'showLensFlare').name('Show Lens Flare')
+      .onChange((value) => this.toggleLensFlare(value));
 
     // Camera controls
     const cameraFolder = this.gui.addFolder('Camera');
@@ -151,6 +309,8 @@ export class Controls {
       'Sun',
       ...this.planets.map(p => p.data.name),
       ...this.dwarfPlanets.map(p => p.data.name),
+      ...this.majorAsteroids.map(a => a.data.displayName || a.data.name),
+      ...this.spacecraft.map(s => s.data.name),
       ...(this.comet ? ["Halley's Comet"] : [])
     ];
 
@@ -161,19 +321,23 @@ export class Controls {
     // Audio controls
     const audioFolder = this.gui.addFolder('Audio');
     audioFolder.add(this.settings, 'audioMuted').name('Muted (M)')
-      .onChange((value) => {
-        if (value) {
-          this.audioSystem.mute();
-        } else {
-          this.audioSystem.unmute();
-        }
-      });
+      .onChange((value) => this.setAudioMuted(value));
     audioFolder.add(this.settings, 'masterVolume', 0, 1, 0.05).name('Master Volume')
-      .onChange((value) => this.audioSystem.setMasterVolume(value));
+      .onChange((value) => this.setMasterVolume(value));
     audioFolder.add(this.settings, 'ambientVolume', 0, 1, 0.05).name('Ambient Volume')
-      .onChange((value) => this.audioSystem.setAmbientVolume(value));
+      .onChange((value) => this.setAmbientVolume(value));
     audioFolder.add(this.settings, 'uiVolume', 0, 1, 0.05).name('UI Sounds')
-      .onChange((value) => this.audioSystem.setUIVolume(value));
+      .onChange((value) => this.setUISoundVolume(value));
+    audioFolder.add(this.settings, 'musicVolume', 0, 1, 0.05).name('Music Volume')
+      .onChange((value) => this.setMusicVolume(value));
+    audioFolder.add(this.settings, 'musicMode', ['off', 'generative'])
+      .name('Music Style')
+      .onChange((value) => {
+        if (this.audioManager) {
+          this.audioManager.setMusicMode(value);
+        }
+        this.updateMusicControls(value);
+      });
 
     simFolder.open();
     displayFolder.open();
@@ -250,11 +414,27 @@ export class Controls {
           break;
         case 'm':
         case 'M':
-          this.settings.audioMuted = this.audioSystem.toggleMute();
+          this.settings.audioMuted = this.toggleAudioMute();
           this.gui.controllersRecursive().find(c => c.property === 'audioMuted')?.updateDisplay();
           break;
       }
     });
+  }
+
+  /**
+   * Trigger planet signature sound when focusing
+   */
+  triggerPlanetSound(name) {
+    if (this.audioManager) {
+      // Only trigger for planets/sun with signature sounds
+      const planetsWithSounds = ['Sun', 'Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'];
+      if (planetsWithSounds.includes(name)) {
+        this.audioManager.setFocusedPlanet(name);
+      } else {
+        // Clear focused planet sound for non-planet objects
+        this.audioManager.setFocusedPlanet(null);
+      }
+    }
   }
 
   /**
@@ -266,11 +446,16 @@ export class Controls {
 
     if (name === 'None') {
       this.resetCamera();
+      // Clear planet sound when unfocusing
+      this.triggerPlanetSound(null);
       return;
     }
 
     // Play focus sound
-    this.audioSystem.playFocusSound(name);
+    this.playFocusSound(name);
+
+    // Trigger planet signature sound
+    this.triggerPlanetSound(name);
 
     if (name === 'Sun') {
       this.focusOnObject(this.sun.getMesh());
@@ -280,6 +465,12 @@ export class Controls {
 
     // Check comet
     if (name === "Halley's Comet" && this.comet) {
+      // Re-show comet if hidden
+      if (!this.settings.showComet) {
+        this.settings.showComet = true;
+        this.toggleComet(true);
+        this.gui.controllersRecursive().find(c => c.property === 'showComet')?.updateDisplay();
+      }
       this.focusOnComet();
       this.showCometInfo();
       return;
@@ -287,13 +478,55 @@ export class Controls {
 
     // Check planets
     let target = this.planets.find(p => p.data.name === name);
-    if (!target) {
-      target = this.dwarfPlanets.find(p => p.data.name === name);
-    }
-
     if (target) {
       this.focusOnPlanet(target);
       this.showPlanetInfo(target);
+      return;
+    }
+
+    // Check dwarf planets
+    target = this.dwarfPlanets.find(p => p.data.name === name);
+    if (target) {
+      // Re-show dwarf planets if hidden
+      if (!this.settings.showDwarfPlanets) {
+        this.settings.showDwarfPlanets = true;
+        this.toggleDwarfPlanets(true);
+        this.gui.controllersRecursive().find(c => c.property === 'showDwarfPlanets')?.updateDisplay();
+      }
+      this.focusOnPlanet(target);
+      this.showPlanetInfo(target);
+      return;
+    }
+
+    // Check asteroids (match by name or displayName)
+    const asteroid = this.majorAsteroids.find(a =>
+      a.data.name === name ||
+      a.data.displayName === name ||
+      (a.data.displayName || a.data.name) === name
+    );
+    if (asteroid) {
+      // Re-show asteroids if hidden
+      if (!this.settings.showAsteroids) {
+        this.settings.showAsteroids = true;
+        this.toggleAsteroids(true);
+        this.gui.controllersRecursive().find(c => c.property === 'showAsteroids')?.updateDisplay();
+      }
+      this.focusOnAsteroid(asteroid);
+      this.showAsteroidInfo(asteroid);
+      return;
+    }
+
+    // Check spacecraft
+    const craft = this.spacecraft.find(s => s.data.name === name);
+    if (craft) {
+      // Re-show spacecraft if hidden
+      if (!this.settings.showSpacecraft) {
+        this.settings.showSpacecraft = true;
+        this.toggleSpacecraft(true);
+        this.gui.controllersRecursive().find(c => c.property === 'showSpacecraft')?.updateDisplay();
+      }
+      this.focusOnSpacecraft(craft);
+      this.showSpacecraftInfo(craft);
     }
   }
 
@@ -396,7 +629,7 @@ export class Controls {
           slider.value = daysDiff;
         }
         // Play a sound effect
-        this.audioSystem.playSelectSound('event');
+        this.playSelectSound('event');
       });
 
       markersContainer.appendChild(marker);
@@ -487,7 +720,7 @@ export class Controls {
       if (slider) {
         slider.value = eventDays;
       }
-      this.audioSystem.playSelectSound('event');
+      this.playSelectSound('event');
       this.dismissNotification(notification);
     });
 
@@ -1133,6 +1366,44 @@ export class Controls {
       container.appendChild(label);
     });
 
+    // Asteroid labels
+    this.majorAsteroids.forEach(asteroid => {
+      const label = this.createLabel(asteroid.data.displayName || asteroid.data.name);
+      label.classList.add('asteroid-label');
+      label.style.cursor = 'pointer';
+      label.addEventListener('click', () => {
+        this.playSelectSound(asteroid.data.name);
+        this.showAsteroidInfo(asteroid);
+        this.focusOnAsteroid(asteroid);
+        this.playFocusSound(asteroid.data.name);
+      });
+      this.labels.push({
+        element: label,
+        asteroid: asteroid,
+        offset: new THREE.Vector3(0, asteroid.data.radius + 0.15, 0)
+      });
+      container.appendChild(label);
+    });
+
+    // Spacecraft labels
+    this.spacecraft.forEach(craft => {
+      const label = this.createLabel(craft.data.name);
+      label.classList.add('spacecraft-label');
+      label.style.cursor = 'pointer';
+      label.addEventListener('click', () => {
+        this.playSelectSound(craft.data.name);
+        this.showSpacecraftInfo(craft);
+        this.focusOnSpacecraft(craft);
+        this.playFocusSound(craft.data.name);
+      });
+      this.labels.push({
+        element: label,
+        spacecraft: craft,
+        offset: new THREE.Vector3(0, 0.4, 0)
+      });
+      container.appendChild(label);
+    });
+
     // Comet label
     if (this.comet) {
       const cometLabel = this.createLabel("Halley's Comet");
@@ -1167,6 +1438,17 @@ export class Controls {
         position.add(labelData.offset);
       } else if (labelData.moonMesh) {
         labelData.moonMesh.getWorldPosition(position);
+        position.add(labelData.offset);
+      } else if (labelData.asteroid) {
+        position = labelData.asteroid.getWorldPosition();
+        position.add(labelData.offset);
+      } else if (labelData.spacecraft) {
+        // Check if spacecraft is visible
+        if (!labelData.spacecraft.spacecraftMesh.visible) {
+          labelData.element.style.display = 'none';
+          return;
+        }
+        position = labelData.spacecraft.getWorldPosition();
         position.add(labelData.offset);
       } else if (labelData.comet) {
         position = labelData.comet.getWorldPosition();
@@ -1204,6 +1486,231 @@ export class Controls {
         planet.orbitLine.visible = visible;
       }
     });
+    // Toggle asteroid orbits
+    this.majorAsteroids.forEach(asteroid => {
+      if (asteroid.orbitLine) {
+        asteroid.orbitLine.visible = visible;
+      }
+    });
+    // Toggle spacecraft trajectories
+    this.spacecraft.forEach(craft => {
+      if (craft.trajectoryLine) {
+        craft.trajectoryLine.visible = visible;
+      }
+    });
+  }
+
+  /**
+   * Toggle spacecraft visibility
+   */
+  toggleSpacecraft(visible) {
+    this.spacecraft.forEach(craft => {
+      if (craft.group) {
+        craft.group.visible = visible;
+      }
+      if (craft.trajectoryLine) {
+        craft.trajectoryLine.visible = visible && this.settings.showOrbits;
+      }
+    });
+    // Toggle spacecraft labels
+    this.labels.forEach(labelData => {
+      if (labelData.spacecraft) {
+        labelData.element.style.display = visible && this.settings.showLabels ? 'block' : 'none';
+      }
+    });
+  }
+
+  /**
+   * Toggle dwarf planet visibility
+   */
+  toggleDwarfPlanets(visible) {
+    this.dwarfPlanets.forEach(dwarf => {
+      if (dwarf.orbitGroup) {
+        dwarf.orbitGroup.visible = visible;
+      }
+      if (dwarf.orbitLine) {
+        dwarf.orbitLine.visible = visible && this.settings.showOrbits;
+      }
+    });
+    // Toggle dwarf planet labels
+    this.labels.forEach(labelData => {
+      if (labelData.planet && this.dwarfPlanets.includes(labelData.planet)) {
+        labelData.element.style.display = visible && this.settings.showLabels ? 'block' : 'none';
+      }
+    });
+  }
+
+  /**
+   * Toggle major asteroid visibility
+   */
+  toggleAsteroids(visible) {
+    this.majorAsteroids.forEach(asteroid => {
+      if (asteroid.orbitGroup) {
+        asteroid.orbitGroup.visible = visible;
+      }
+      if (asteroid.orbitLine) {
+        asteroid.orbitLine.visible = visible && this.settings.showOrbits;
+      }
+    });
+    // Toggle asteroid labels
+    this.labels.forEach(labelData => {
+      if (labelData.asteroid) {
+        labelData.element.style.display = visible && this.settings.showLabels ? 'block' : 'none';
+      }
+    });
+  }
+
+  /**
+   * Toggle moon visibility on all planets
+   */
+  toggleMoons(visible) {
+    [...this.planets, ...this.dwarfPlanets].forEach(planet => {
+      if (planet.moons) {
+        planet.moons.forEach(moon => {
+          if (moon.mesh) {
+            moon.mesh.visible = visible;
+          }
+          if (moon.pivot) {
+            moon.pivot.visible = visible;
+          }
+          if (moon.atmosphereMesh) {
+            moon.atmosphereMesh.visible = visible;
+          }
+        });
+      }
+    });
+    // Toggle moon labels
+    this.labels.forEach(labelData => {
+      if (labelData.moonMesh) {
+        labelData.element.style.display = visible && this.settings.showLabels ? 'block' : 'none';
+      }
+    });
+  }
+
+  /**
+   * Toggle asteroid belt and Kuiper belt particle systems
+   */
+  toggleBelts(visible) {
+    if (this.asteroidBelt) {
+      const mesh = this.asteroidBelt.getMesh();
+      if (mesh) {
+        mesh.visible = visible;
+      }
+    }
+    if (this.kuiperBelt) {
+      const mesh = this.kuiperBelt.getMesh();
+      if (mesh) {
+        mesh.visible = visible;
+      }
+    }
+  }
+
+  /**
+   * Toggle planetary ring systems
+   */
+  toggleRings(visible) {
+    this.planets.forEach(planet => {
+      if (planet.ringMesh) {
+        planet.ringMesh.visible = visible;
+      }
+    });
+  }
+
+  /**
+   * Toggle comet visibility
+   */
+  toggleComet(visible) {
+    if (this.comet) {
+      const mesh = this.comet.getMesh();
+      if (mesh) {
+        mesh.visible = visible;
+      }
+      const orbitLine = this.comet.getOrbitLine();
+      if (orbitLine) {
+        orbitLine.visible = visible && this.settings.showOrbits;
+      }
+    }
+    // Toggle comet label
+    this.labels.forEach(labelData => {
+      if (labelData.comet) {
+        labelData.element.style.display = visible && this.settings.showLabels ? 'block' : 'none';
+      }
+    });
+  }
+
+  /**
+   * Toggle event timeline markers and notifications
+   */
+  toggleEvents(visible) {
+    // Toggle event visual effects
+    if (this.eventVisuals) {
+      // Toggle conjunction lines
+      if (this.eventVisuals.conjunctionLines) {
+        this.eventVisuals.conjunctionLines.forEach(line => {
+          if (line) line.visible = visible;
+        });
+      }
+      // Toggle planet glows for events
+      if (this.eventVisuals.planetGlows) {
+        this.eventVisuals.planetGlows.forEach((glow, planet) => {
+          if (glow) glow.visible = visible;
+        });
+      }
+    }
+    // Toggle notification container
+    const notificationContainer = document.getElementById('event-notifications');
+    if (notificationContainer) {
+      notificationContainer.style.display = visible ? 'block' : 'none';
+    }
+    // Toggle timeline markers if they exist
+    const timelineMarkers = document.querySelectorAll('.timeline-event-marker');
+    timelineMarkers.forEach(marker => {
+      marker.style.display = visible ? 'block' : 'none';
+    });
+  }
+
+  /**
+   * Toggle atmospheric Fresnel glow on planets and moons
+   */
+  toggleAtmospheres(visible) {
+    // Toggle planet atmospheres
+    this.planets.forEach(planet => {
+      if (planet.atmosphereMesh) {
+        planet.atmosphereMesh.visible = visible;
+      }
+      // Toggle moon atmospheres (e.g., Titan)
+      if (planet.moons) {
+        planet.moons.forEach(moon => {
+          if (moon.atmosphereMesh) {
+            moon.atmosphereMesh.visible = visible;
+          }
+        });
+      }
+    });
+
+    // Toggle dwarf planet atmospheres (e.g., Pluto)
+    this.dwarfPlanets.forEach(planet => {
+      if (planet.atmosphereMesh) {
+        planet.atmosphereMesh.visible = visible;
+      }
+      // Toggle moon atmospheres (e.g., Triton on Neptune-like bodies)
+      if (planet.moons) {
+        planet.moons.forEach(moon => {
+          if (moon.atmosphereMesh) {
+            moon.atmosphereMesh.visible = visible;
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Toggle Sun's cinematic lens flare effect
+   */
+  toggleLensFlare(visible) {
+    if (this.sun && this.sun.lensflare) {
+      this.sun.lensflare.visible = visible;
+    }
   }
 
   onMouseMove(event) {
@@ -1224,7 +1731,7 @@ export class Controls {
         this.addHighlight(object);
         this.renderer.domElement.style.cursor = 'pointer';
         // Play hover sound
-        this.audioSystem.playHoverSound();
+        this.playHoverSound();
       }
     } else {
       this.removeHighlight();
@@ -1252,6 +1759,16 @@ export class Controls {
 
     [...this.planets, ...this.dwarfPlanets].forEach(planet => {
       objects.push(...planet.getClickableObjects());
+    });
+
+    // Add asteroid clickable objects
+    this.majorAsteroids.forEach(asteroid => {
+      objects.push(...asteroid.getClickableObjects());
+    });
+
+    // Add spacecraft clickable objects
+    this.spacecraft.forEach(craft => {
+      objects.push(...craft.getClickableObjects());
     });
 
     // Add comet clickable objects
@@ -1288,7 +1805,7 @@ export class Controls {
 
     // Play select sound
     const bodyName = object.userData.name || 'default';
-    this.audioSystem.playSelectSound(bodyName);
+    this.playSelectSound(bodyName);
 
     // Find the planet/dwarf planet this belongs to
     let targetPlanet = null;
@@ -1296,7 +1813,7 @@ export class Controls {
     if (object.userData.name === 'Sun') {
       this.showSunInfo();
       this.focusOnObject(this.sun.getMesh());
-      this.audioSystem.playFocusSound('Sun');
+      this.playFocusSound('Sun');
       return;
     }
 
@@ -1308,8 +1825,32 @@ export class Controls {
     if (targetPlanet) {
       this.showPlanetInfo(targetPlanet);
       this.focusOnPlanet(targetPlanet);
-      this.audioSystem.playFocusSound(targetPlanet.data.name);
+      this.playFocusSound(targetPlanet.data.name);
       return;
+    }
+
+    // Check if it's an asteroid
+    if (object.userData.isAsteroid) {
+      const asteroid = this.majorAsteroids.find(a =>
+        (a.data.displayName || a.data.name) === object.userData.name
+      );
+      if (asteroid) {
+        this.showAsteroidInfo(asteroid);
+        this.focusOnAsteroid(asteroid);
+        this.playFocusSound(asteroid.data.name);
+        return;
+      }
+    }
+
+    // Check if it's a spacecraft
+    if (object.userData.isSpacecraft) {
+      const craft = this.spacecraft.find(s => s.data.name === object.userData.name);
+      if (craft) {
+        this.showSpacecraftInfo(craft);
+        this.focusOnSpacecraft(craft);
+        this.playFocusSound(craft.data.name);
+        return;
+      }
     }
 
     // Check if it's a moon
@@ -1318,7 +1859,7 @@ export class Controls {
       if (moon) {
         this.showMoonInfo(moon, planet);
         this.focusOnMoon(moon);
-        this.audioSystem.playFocusSound(moon.data.name);
+        this.playFocusSound(moon.data.name);
         return;
       }
     }
@@ -1327,7 +1868,7 @@ export class Controls {
     if (object.userData.isComet && this.comet) {
       this.showCometInfo();
       this.focusOnComet();
-      this.audioSystem.playFocusSound("Halley's Comet");
+      this.playFocusSound("Halley's Comet");
       return;
     }
   }
@@ -1479,10 +2020,114 @@ export class Controls {
    */
   selectCometFromLabel() {
     if (!this.comet) return;
-    this.audioSystem.playSelectSound("Halley's Comet");
+    this.playSelectSound("Halley's Comet");
     this.showCometInfo();
     this.focusOnComet();
-    this.audioSystem.playFocusSound("Halley's Comet");
+    this.playFocusSound("Halley's Comet");
+  }
+
+  /**
+   * Focus camera on an asteroid
+   */
+  focusOnAsteroid(asteroid) {
+    const targetPosition = asteroid.getWorldPosition();
+    // Use smaller distance since asteroids are small
+    const distance = asteroid.data.radius * 10 + 3;
+    this.animateCameraTo(targetPosition, distance);
+  }
+
+  /**
+   * Show asteroid info panel
+   */
+  showAsteroidInfo(asteroid) {
+    const panel = document.getElementById('info-panel');
+    const nameEl = document.getElementById('planet-name');
+    const factsEl = document.getElementById('planet-facts');
+
+    nameEl.textContent = asteroid.data.displayName || asteroid.data.name;
+
+    let html = `<div class="planet-icon" style="background: #${asteroid.data.color.toString(16).padStart(6, '0')};"></div>`;
+
+    // Orbital information
+    html += `<div class="distance-indicator">
+      <p><strong>Orbital Elements:</strong></p>
+      <p>Semi-major axis: ${asteroid.data.semiMajorAxis.toFixed(3)} AU</p>
+      <p>Eccentricity: ${asteroid.data.eccentricity.toFixed(3)}</p>
+      <p>Inclination: ${asteroid.data.inclination.toFixed(2)}°</p>
+      <p>Period: ${asteroid.data.orbitalPeriod.toFixed(2)} years</p>
+    </div>`;
+
+    // Physical properties
+    html += `<p><strong>Spectral type:</strong> ${asteroid.data.type}</p>`;
+    html += `<p><strong>Albedo:</strong> ${asteroid.data.albedo.toFixed(3)}</p>`;
+
+    // Facts
+    const facts = asteroid.data.facts;
+    if (facts) {
+      for (const [key, value] of Object.entries(facts)) {
+        const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+        html += `<p><strong>${label}:</strong> ${value}</p>`;
+      }
+    }
+
+    factsEl.innerHTML = html;
+    panel.classList.remove('hidden');
+  }
+
+  /**
+   * Focus camera on a spacecraft
+   */
+  focusOnSpacecraft(craft) {
+    const targetPosition = craft.getWorldPosition();
+    // Use larger distance for spacecraft since they're far away
+    this.animateCameraTo(targetPosition, 5);
+  }
+
+  /**
+   * Show spacecraft info panel
+   */
+  showSpacecraftInfo(craft) {
+    const panel = document.getElementById('info-panel');
+    const nameEl = document.getElementById('planet-name');
+    const factsEl = document.getElementById('planet-facts');
+
+    nameEl.textContent = craft.data.name;
+
+    // Get current event/phase
+    const currentEvent = craft.getCurrentEvent(this.getSimulationDate().getTime());
+
+    let html = `<div class="planet-icon" style="background: radial-gradient(circle, #${craft.data.color.toString(16).padStart(6, '0')}, #222);"></div>`;
+
+    // Status indicator
+    const statusClass = craft.data.active ? 'active' : 'inactive';
+    html += `<p class="spacecraft-status ${statusClass}"><strong>Status:</strong> ${craft.data.active ? 'Active' : 'Inactive'}</p>`;
+
+    // Current phase
+    html += `<p><strong>Current Phase:</strong> ${currentEvent}</p>`;
+
+    // Velocity
+    if (craft.data.velocity > 0) {
+      html += `<p><strong>Velocity:</strong> ${craft.data.velocity} km/s</p>`;
+    }
+
+    // Facts
+    const facts = craft.data.facts;
+    if (facts) {
+      for (const [key, value] of Object.entries(facts)) {
+        const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+        html += `<p><strong>${label}:</strong> ${value}</p>`;
+      }
+    }
+
+    factsEl.innerHTML = html;
+    panel.classList.remove('hidden');
+  }
+
+  /**
+   * Get current simulation date
+   */
+  getSimulationDate() {
+    return julianDateToDate(this.currentJulianDate);
   }
 
   closeInfoPanel() {
@@ -1535,6 +2180,8 @@ export class Controls {
     this.gui.controllersRecursive().find(c => c.property === 'focusedPlanet')?.updateDisplay();
     this.closeInfoPanel();
     this.animateCameraTo(new THREE.Vector3(0, 0, 0), 60);
+    // Clear planet signature sound
+    this.triggerPlanetSound(null);
   }
 
   updateCameraAnimation() {
@@ -1610,6 +2257,9 @@ export class Controls {
     // Dispose audio system
     if (this.audioSystem) {
       this.audioSystem.dispose();
+    }
+    if (this.audioManager) {
+      this.audioManager.dispose();
     }
   }
 }

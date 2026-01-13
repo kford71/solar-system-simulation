@@ -29,6 +29,7 @@ const RAD_TO_DEG = 180 / Math.PI;
  * omega = longitude of ascending node (degrees)
  *
  * Rates are per Julian century (36525 days)
+ * @type {import('../types/index.d.ts').OrbitalElementsMap}
  */
 export const ORBITAL_ELEMENTS = {
   Mercury: {
@@ -111,6 +112,71 @@ export const ORBITAL_ELEMENTS = {
     L: 153.0, L_rate: 78.19, // Approximate mean motion
     wbar: 73.0, wbar_rate: 0,
     omega: 80.3, omega_rate: 0
+  },
+  // Additional dwarf planets
+  Haumea: {
+    a: 43.22, a_rate: 0,
+    e: 0.191, e_rate: 0,
+    i: 28.2, i_rate: 0,
+    L: 566.2, L_rate: 1.27,  // ~284 year period → ~1.27°/year × 100 = 127°/century
+    wbar: 361.2, wbar_rate: 0,  // omega + w = 122.1 + 239.1
+    omega: 122.1, omega_rate: 0
+  },
+  Makemake: {
+    a: 45.56, a_rate: 0,
+    e: 0.158, e_rate: 0,
+    i: 29.0, i_rate: 0,
+    L: 518.0, L_rate: 1.17,  // ~308 year period
+    wbar: 376.0, wbar_rate: 0,  // 79.6 + 296.4
+    omega: 79.6, omega_rate: 0
+  },
+  Eris: {
+    a: 67.86, a_rate: 0,
+    e: 0.441, e_rate: 0,
+    i: 44.0, i_rate: 0,
+    L: 392.4, L_rate: 0.64,  // ~559 year period
+    wbar: 187.4, wbar_rate: 0,  // 35.9 + 151.5
+    omega: 35.9, omega_rate: 0
+  },
+  Orcus: {
+    a: 39.40, a_rate: 0,
+    e: 0.220, e_rate: 0,
+    i: 20.6, i_rate: 0,
+    L: 508.1, L_rate: 1.46,  // ~247 year period
+    wbar: 341.1, wbar_rate: 0,  // 268.8 + 72.3
+    omega: 268.8, omega_rate: 0
+  },
+  Salacia: {
+    a: 42.18, a_rate: 0,
+    e: 0.106, e_rate: 0,
+    i: 23.9, i_rate: 0,
+    L: 711.5, L_rate: 1.31,  // ~274 year period
+    wbar: 591.5, wbar_rate: 0,  // 280.0 + 311.5
+    omega: 280.0, omega_rate: 0
+  },
+  Quaoar: {
+    a: 43.69, a_rate: 0,
+    e: 0.040, e_rate: 0,
+    i: 8.0, i_rate: 0,
+    L: 624.0, L_rate: 1.25,  // ~289 year period
+    wbar: 344.0, wbar_rate: 0,  // 189.0 + 155.0
+    omega: 189.0, omega_rate: 0
+  },
+  Gonggong: {
+    a: 66.90, a_rate: 0,
+    e: 0.503, e_rate: 0,
+    i: 30.7, i_rate: 0,
+    L: 649.0, L_rate: 0.65,  // ~554 year period
+    wbar: 544.0, wbar_rate: 0,  // 336.8 + 207.2
+    omega: 336.8, omega_rate: 0
+  },
+  Sedna: {
+    a: 506.8, a_rate: 0,
+    e: 0.855, e_rate: 0,
+    i: 11.9, i_rate: 0,
+    L: 814.0, L_rate: 0.0316,  // ~11400 year period → very slow
+    wbar: 456.0, wbar_rate: 0,  // 144.5 + 311.5
+    omega: 144.5, omega_rate: 0
   }
 };
 
@@ -132,6 +198,8 @@ export const MOON_ELEMENTS = {
 
 /**
  * Convert a JavaScript Date to Julian Date
+ * @param {Date} date - JavaScript Date object
+ * @returns {number} Julian Date
  */
 export function dateToJulianDate(date) {
   const year = date.getUTCFullYear();
@@ -164,6 +232,8 @@ export function dateToJulianDate(date) {
 
 /**
  * Convert Julian Date to JavaScript Date
+ * @param {number} jd - Julian Date
+ * @returns {Date} JavaScript Date object
  */
 export function julianDateToDate(jd) {
   const Z = Math.floor(jd + 0.5);
@@ -238,7 +308,7 @@ function solveKepler(M, e) {
  *
  * @param {string} planetName - Name of the planet
  * @param {number} jd - Julian Date
- * @returns {Object} {x, y, z, r, theta} - Heliocentric coordinates in AU
+ * @returns {import('../types/index.d.ts').HeliocentricPosition} Heliocentric coordinates in AU
  */
 export function calculatePlanetPosition(planetName, jd) {
   const elements = ORBITAL_ELEMENTS[planetName];
@@ -305,7 +375,7 @@ export function calculatePlanetPosition(planetName, jd) {
  * Calculate Moon's position relative to Earth at a given Julian Date
  *
  * @param {number} jd - Julian Date
- * @returns {Object} {x, y, z, phase} - Position relative to Earth in AU, and phase angle
+ * @returns {import('../types/index.d.ts').MoonPosition} Position relative to Earth in AU, and phase angle
  */
 export function calculateMoonPosition(jd) {
   // Centuries since J2000.0
@@ -376,6 +446,8 @@ export function calculateMoonPosition(jd) {
 
 /**
  * Get orbital period in Earth years from semi-major axis (Kepler's 3rd law)
+ * @param {number} semiMajorAxisAU - Semi-major axis in AU
+ * @returns {number} Orbital period in Earth years
  */
 export function getOrbitalPeriod(semiMajorAxisAU) {
   return Math.pow(semiMajorAxisAU, 1.5);
@@ -383,6 +455,8 @@ export function getOrbitalPeriod(semiMajorAxisAU) {
 
 /**
  * Calculate positions for all planets at a given date
+ * @param {Date} date - JavaScript Date object
+ * @returns {Object.<string, import('../types/index.d.ts').HeliocentricPosition|import('../types/index.d.ts').MoonPosition>} Map of body names to positions
  */
 export function calculateAllPositions(date) {
   const jd = dateToJulianDate(date);

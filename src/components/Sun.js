@@ -281,65 +281,226 @@ export class Sun {
   }
 
   /**
-   * Create lens flare effect
+   * Create cinematic lens flare effect
+   * Attached to point light for proper occlusion when sun is behind objects
    */
   createLensFlare() {
-    // Create lens flare textures procedurally
-    const textureFlare0 = this.createFlareTexture(256, 'radial');
-    const textureFlare1 = this.createFlareTexture(128, 'ring');
-    const textureFlare2 = this.createFlareTexture(64, 'hex');
+    // Generate high-quality procedural flare textures
+    const textureFlareMain = this.createGlowFlareTexture(256, 'rgba(255,255,240,1)', 0.3);
+    const textureFlareHex = this.createHexagonFlareTexture(64, 'rgba(255,200,100,1)');
+    const textureFlareRing = this.createRingFlareTexture(128, 'rgba(200,180,255,1)');
+    const textureFlareGlow = this.createGlowFlareTexture(128, 'rgba(255,220,180,1)', 0.6);
+    const textureFlareSmall = this.createGlowFlareTexture(64, 'rgba(255,240,200,1)', 0.5);
 
     this.lensflare = new Lensflare();
-    // Much more subtle lens flare - reduced sizes and opacity
-    this.lensflare.addElement(new LensflareElement(textureFlare0, 200, 0, new THREE.Color(0xffffff)));
-    this.lensflare.addElement(new LensflareElement(textureFlare1, 30, 0.6, new THREE.Color(0xffcc88)));
-    this.lensflare.addElement(new LensflareElement(textureFlare1, 35, 0.7, new THREE.Color(0xffaa66)));
-    this.lensflare.addElement(new LensflareElement(textureFlare2, 50, 0.9, new THREE.Color(0xffddaa)));
-    this.lensflare.addElement(new LensflareElement(textureFlare2, 30, 1.0, new THREE.Color(0xffffcc)));
 
-    this.group.add(this.lensflare);
+    // Main sun glow (at light source position, distance = 0)
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareMain,
+      500,      // size - large central glow
+      0,        // distance (0 = at light source)
+      new THREE.Color(0xffffee)
+    ));
+
+    // Secondary glow closer to sun
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareGlow,
+      80,
+      0.1,
+      new THREE.Color(0xffffcc)
+    ));
+
+    // Elements spread along the line from sun toward camera center
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareGlow,
+      60,
+      0.25,
+      new THREE.Color(0xffeeaa)
+    ));
+
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareHex,
+      35,
+      0.4,
+      new THREE.Color(0xffaa66)
+    ));
+
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareRing,
+      70,
+      0.55,
+      new THREE.Color(0xaaaaff)
+    ));
+
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareHex,
+      25,
+      0.65,
+      new THREE.Color(0xffddaa)
+    ));
+
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareSmall,
+      40,
+      0.75,
+      new THREE.Color(0xffffff)
+    ));
+
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareGlow,
+      90,
+      0.85,
+      new THREE.Color(0xffffee)
+    ));
+
+    // Opposite side from sun (past screen center)
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareHex,
+      45,
+      1.0,
+      new THREE.Color(0xffcc88)
+    ));
+
+    this.lensflare.addElement(new LensflareElement(
+      textureFlareRing,
+      55,
+      1.1,
+      new THREE.Color(0xccccff)
+    ));
+
+    // Note: Lensflare will be added to pointLight in createLights()
+    // so occlusion works properly (objects blocking sun will dim the flare)
   }
 
   /**
-   * Create procedural flare textures
+   * Create soft glow flare texture with configurable falloff
    */
-  createFlareTexture(size, type) {
+  createGlowFlareTexture(size, color, falloff = 0.5) {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
-    const center = size / 2;
 
-    if (type === 'radial') {
-      const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
-      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-      gradient.addColorStop(0.2, 'rgba(255, 220, 150, 0.8)');
-      gradient.addColorStop(0.4, 'rgba(255, 180, 100, 0.4)');
-      gradient.addColorStop(0.8, 'rgba(255, 100, 50, 0.1)');
-      gradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, size, size);
-    } else if (type === 'ring') {
-      ctx.strokeStyle = 'rgba(255, 200, 150, 0.5)';
-      ctx.lineWidth = size * 0.1;
-      ctx.beginPath();
-      ctx.arc(center, center, size * 0.35, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (type === 'hex') {
-      ctx.fillStyle = 'rgba(255, 220, 180, 0.3)';
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2;
-        const x = center + Math.cos(angle) * center * 0.8;
-        const y = center + Math.sin(angle) * center * 0.8;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.fill();
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const radius = size / 2;
+
+    // Parse the rgba color to get components
+    const colorMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    const r = colorMatch ? colorMatch[1] : 255;
+    const g = colorMatch ? colorMatch[2] : 255;
+    const b = colorMatch ? colorMatch[3] : 255;
+
+    // Radial gradient for soft glow
+    const gradient = ctx.createRadialGradient(
+      centerX, centerY, 0,
+      centerX, centerY, radius
+    );
+
+    gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
+    gradient.addColorStop(falloff * 0.5, `rgba(${r},${g},${b},0.6)`);
+    gradient.addColorStop(falloff, `rgba(${r},${g},${b},0.3)`);
+    gradient.addColorStop(falloff + (1 - falloff) * 0.5, `rgba(${r},${g},${b},0.1)`);
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  /**
+   * Create hexagonal aperture flare texture
+   */
+  createHexagonFlareTexture(size, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const radius = size * 0.4;
+
+    // Parse the rgba color
+    const colorMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    const r = colorMatch ? colorMatch[1] : 255;
+    const g = colorMatch ? colorMatch[2] : 200;
+    const b = colorMatch ? colorMatch[3] : 100;
+
+    // Draw hexagon path
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const angle = (i * Math.PI * 2) / 6 - Math.PI / 2;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     }
+    ctx.closePath();
 
-    return new THREE.CanvasTexture(canvas);
+    // Soft gradient fill
+    const gradient = ctx.createRadialGradient(
+      centerX, centerY, 0,
+      centerX, centerY, radius
+    );
+    gradient.addColorStop(0, `rgba(${r},${g},${b},0.8)`);
+    gradient.addColorStop(0.5, `rgba(${r},${g},${b},0.4)`);
+    gradient.addColorStop(1, `rgba(${r},${g},${b},0.1)`);
+
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  /**
+   * Create ring/circle flare texture
+   */
+  createRingFlareTexture(size, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const outerRadius = size * 0.45;
+    const innerRadius = size * 0.32;
+
+    // Parse the rgba color
+    const colorMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    const r = colorMatch ? colorMatch[1] : 200;
+    const g = colorMatch ? colorMatch[2] : 180;
+    const b = colorMatch ? colorMatch[3] : 255;
+
+    // Create ring using arc
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2, true);
+    ctx.closePath();
+
+    // Radial gradient for the ring
+    const gradient = ctx.createRadialGradient(
+      centerX, centerY, innerRadius,
+      centerX, centerY, outerRadius
+    );
+    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+    gradient.addColorStop(0.2, `rgba(${r},${g},${b},0.3)`);
+    gradient.addColorStop(0.5, `rgba(${r},${g},${b},0.5)`);
+    gradient.addColorStop(0.8, `rgba(${r},${g},${b},0.3)`);
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
   }
 
   /**
@@ -351,6 +512,12 @@ export class Sun {
     this.pointLight.position.set(0, 0, 0);
     this.pointLight.castShadow = false;
     this.group.add(this.pointLight);
+
+    // Attach lens flare to point light for proper occlusion
+    // When objects block the sun, the flare will properly dim
+    if (this.lensflare) {
+      this.pointLight.add(this.lensflare);
+    }
 
     // Very dim ambient light so dark sides aren't completely black
     this.ambientLight = new THREE.AmbientLight(0x404040, 0.15);
