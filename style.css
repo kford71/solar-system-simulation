@@ -1,0 +1,352 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  overflow: hidden;
+  background: #000;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+#solar-system {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Info Panel */
+#info-panel {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 320px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: rgba(10, 10, 30, 0.95);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  color: #fff;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 30px rgba(0, 100, 255, 0.2);
+  z-index: 100;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+#info-panel.hidden {
+  transform: translateX(350px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+#info-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+#info-panel::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+#info-panel::-webkit-scrollbar-thumb {
+  background: rgba(100, 150, 255, 0.5);
+  border-radius: 3px;
+}
+
+#close-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+#close-panel:hover {
+  opacity: 1;
+}
+
+#planet-name {
+  margin-bottom: 15px;
+  font-size: 1.5rem;
+  color: #88ccff;
+  text-shadow: 0 0 10px rgba(100, 150, 255, 0.5);
+}
+
+#planet-facts {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+#planet-facts p {
+  margin-bottom: 6px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(100, 150, 255, 0.5);
+}
+
+#planet-facts strong {
+  color: #aaddff;
+}
+
+/* Planet Icon in Info Panel */
+.planet-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  margin-bottom: 15px;
+  box-shadow: 0 0 20px rgba(100, 150, 255, 0.5);
+}
+
+.sun-icon {
+  background: radial-gradient(circle, #ffdd44, #ff6600);
+  box-shadow: 0 0 30px rgba(255, 200, 100, 0.8);
+}
+
+.moon-icon {
+  background: radial-gradient(circle, #cccccc, #888888);
+  width: 30px;
+  height: 30px;
+}
+
+/* Distance Indicator */
+.distance-indicator {
+  background: rgba(0, 50, 100, 0.3);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.distance-indicator p {
+  border-left: none !important;
+  padding-left: 0 !important;
+  margin-bottom: 4px !important;
+}
+
+/* Earth Comparison Section */
+.earth-comparison {
+  background: rgba(50, 100, 50, 0.3);
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+.earth-comparison p {
+  border-left: none !important;
+  padding-left: 0 !important;
+  margin-bottom: 4px !important;
+}
+
+/* Loading Screen */
+#loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.5rem;
+  z-index: 1000;
+  transition: opacity 0.5s ease;
+}
+
+#loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Planet Labels */
+.planet-label {
+  position: absolute;
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+  margin-top: -8px;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 1);
+}
+
+.dwarf-planet-label {
+  font-size: 10px;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+/* Time Display */
+#time-display {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 30, 0.9);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 12px;
+  padding: 15px 25px;
+  color: #fff;
+  text-align: center;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.time-date {
+  font-size: 1.2rem;
+  color: #88ccff;
+  margin-bottom: 10px;
+  text-shadow: 0 0 10px rgba(100, 150, 255, 0.5);
+}
+
+.time-controls {
+  width: 300px;
+}
+
+#time-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(100, 150, 255, 0.3);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+#time-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #88ccff;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(100, 150, 255, 0.8);
+}
+
+#time-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #88ccff;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 10px rgba(100, 150, 255, 0.8);
+}
+
+.time-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 5px;
+}
+
+/* Mini-map */
+#minimap-container {
+  position: fixed;
+  bottom: 100px;
+  left: 20px;
+  background: rgba(10, 10, 30, 0.9);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 12px;
+  padding: 10px;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.minimap-title {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  text-align: center;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#minimap {
+  display: block;
+  border-radius: 8px;
+}
+
+/* Keyboard Shortcuts Help (optional) */
+.keyboard-help {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(10, 10, 30, 0.8);
+  border: 1px solid rgba(100, 150, 255, 0.2);
+  border-radius: 8px;
+  padding: 10px 15px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  z-index: 50;
+}
+
+.keyboard-help kbd {
+  background: rgba(100, 150, 255, 0.3);
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin: 0 2px;
+}
+
+/* lil-gui overrides for consistent styling */
+.lil-gui {
+  --background-color: rgba(10, 10, 30, 0.9) !important;
+  --text-color: #88ccff !important;
+  --title-background-color: rgba(50, 80, 150, 0.5) !important;
+  --title-text-color: #aaddff !important;
+  --widget-color: rgba(50, 80, 150, 0.5) !important;
+  --hover-color: rgba(70, 100, 180, 0.7) !important;
+  --focus-color: rgba(100, 150, 255, 0.8) !important;
+  --number-color: #88ff88 !important;
+  --string-color: #ffaa88 !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  #info-panel {
+    width: 280px;
+    right: 10px;
+    top: 10px;
+    max-height: 60vh;
+  }
+
+  #time-display {
+    bottom: 10px;
+    padding: 10px 15px;
+  }
+
+  .time-controls {
+    width: 200px;
+  }
+
+  #minimap-container {
+    bottom: 80px;
+    left: 10px;
+  }
+
+  #minimap {
+    width: 150px;
+    height: 150px;
+  }
+
+  .lil-gui {
+    --width: 250px !important;
+  }
+}
