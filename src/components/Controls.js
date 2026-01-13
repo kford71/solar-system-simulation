@@ -88,6 +88,10 @@ export class Controls {
     this.minimapCanvas = null;
     this.minimapCtx = null;
 
+    // Event notification tracking
+    this.shownEventNotifications = new Set();
+    this.activeNotifications = [];
+
     this.init();
   }
 
@@ -99,6 +103,7 @@ export class Controls {
     this.createLabels();
     this.createTimeDisplay();
     this.createMinimap();
+    this.createNotificationContainer();
   }
 
   setupOrbitControls() {
@@ -391,6 +396,127 @@ export class Controls {
   }
 
   /**
+   * Create notification container for event proximity alerts
+   */
+  createNotificationContainer() {
+    const container = document.getElementById('app');
+
+    const notificationContainer = document.createElement('div');
+    notificationContainer.id = 'event-notifications';
+    container.appendChild(notificationContainer);
+  }
+
+  /**
+   * Check if current date is near any astronomical events
+   */
+  checkEventProximity() {
+    const proximityDays = 30;
+
+    ASTRONOMICAL_EVENTS.forEach(event => {
+      const eventDate = new Date(event.date);
+      const daysDiff = Math.floor((eventDate - this.startDate) / (1000 * 60 * 60 * 24));
+
+      // Check if we're within proximity of this event
+      const daysFromEvent = Math.abs(this.simulatedTime - daysDiff);
+
+      if (daysFromEvent <= proximityDays) {
+        // Only show notification if we haven't shown it yet
+        const eventKey = `${event.date}-${event.name}`;
+        if (!this.shownEventNotifications.has(eventKey)) {
+          this.shownEventNotifications.add(eventKey);
+          this.showEventNotification(event, daysDiff);
+        }
+      }
+    });
+  }
+
+  /**
+   * Show a notification for an astronomical event
+   */
+  showEventNotification(event, eventDays) {
+    const container = document.getElementById('event-notifications');
+    if (!container) return;
+
+    const eventDate = new Date(event.date);
+    const formattedDate = eventDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    // Get color for event type
+    const color = EVENT_COLORS[event.type] || '#88ccff';
+
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = 'event-notification';
+    notification.innerHTML = `
+      <div class="event-notification-icon" style="background-color: ${color};"></div>
+      <div class="event-notification-content">
+        <div class="event-notification-title">${event.name}</div>
+        <div class="event-notification-date">${formattedDate}</div>
+      </div>
+      <div class="event-notification-actions">
+        <button class="event-notification-jump">Jump to Date</button>
+        <button class="event-notification-close">&times;</button>
+      </div>
+    `;
+
+    // Add to container
+    container.appendChild(notification);
+    this.activeNotifications.push(notification);
+
+    // Trigger animation after a frame
+    requestAnimationFrame(() => {
+      notification.classList.add('visible');
+    });
+
+    // Jump to date button
+    const jumpBtn = notification.querySelector('.event-notification-jump');
+    jumpBtn.addEventListener('click', () => {
+      this.simulatedTime = eventDays;
+      const slider = document.getElementById('time-slider');
+      if (slider) {
+        slider.value = eventDays;
+      }
+      this.audioSystem.playSelectSound('event');
+      this.dismissNotification(notification);
+    });
+
+    // Close button
+    const closeBtn = notification.querySelector('.event-notification-close');
+    closeBtn.addEventListener('click', () => {
+      this.dismissNotification(notification);
+    });
+
+    // Auto-dismiss after 6 seconds
+    setTimeout(() => {
+      this.dismissNotification(notification);
+    }, 6000);
+  }
+
+  /**
+   * Dismiss a notification with animation
+   */
+  dismissNotification(notification) {
+    if (!notification || !notification.parentNode) return;
+
+    notification.classList.remove('visible');
+    notification.classList.add('hiding');
+
+    // Remove after animation completes
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+      const index = this.activeNotifications.indexOf(notification);
+      if (index > -1) {
+        this.activeNotifications.splice(index, 1);
+      }
+    }, 300);
+  }
+
+  /**
    * Update time display and calculate Julian Date for orbital mechanics
    */
   updateTimeDisplay(deltaTime) {
@@ -417,6 +543,9 @@ export class Controls {
     if (slider && !slider.matches(':active')) {
       slider.value = Math.max(-36500, Math.min(36500, this.simulatedTime));
     }
+
+    // Check for nearby astronomical events
+    this.checkEventProximity();
   }
 
   /**
