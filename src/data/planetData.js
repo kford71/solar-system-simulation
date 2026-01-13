@@ -44,7 +44,8 @@ export const PLANET_DATA = [
     orbitalPeriod: 0.24,
     rotationPeriod: 58.6,
     axialTilt: 0.03,
-    color: 0x8c8c8c,
+    color: 0x5A5A5A,      // Very dark, coal-like surface
+    albedo: 0.068,        // Lowest albedo - darker than coal
     textureUrl: `${TEXTURE_BASE}/2k_mercury.jpg`,
     // Mercury has no significant atmosphere
     atmosphere: null,
@@ -74,7 +75,8 @@ export const PLANET_DATA = [
     orbitalPeriod: 0.62,
     rotationPeriod: -243,
     axialTilt: 177.4,
-    color: 0xe6c87a,
+    color: 0xFFF8DC,      // Brightest planet, yellowish-white
+    albedo: 0.77,         // Highest albedo - extremely reflective clouds
     textureUrl: `${TEXTURE_BASE}/2k_venus_surface.jpg`,
     atmosphereUrl: `${TEXTURE_BASE}/2k_venus_atmosphere.jpg`,
     // Thick yellow-orange atmosphere
@@ -108,7 +110,8 @@ export const PLANET_DATA = [
     orbitalPeriod: 1.0,
     rotationPeriod: 1,
     axialTilt: 23.4,
-    color: 0x6b93d6,
+    color: 0x4169E1,      // Royal blue
+    albedo: 0.30,         // Moderate reflectivity
     textureUrl: `${TEXTURE_BASE}/2k_earth_daymap.jpg`,
     nightTextureUrl: `${TEXTURE_BASE}/2k_earth_nightmap.jpg`,
     normalMapUrl: `${TEXTURE_BASE}/2k_earth_normal_map.jpg`,
@@ -145,7 +148,8 @@ export const PLANET_DATA = [
     orbitalPeriod: 1.88,
     rotationPeriod: 1.03,
     axialTilt: 25.2,
-    color: 0xc1440e,
+    color: 0xCD5C5C,      // Indian red - rust red-orange
+    albedo: 0.25,         // Low reflectivity
     textureUrl: `${TEXTURE_BASE}/2k_mars.jpg`,
     normalMapUrl: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/mars_1k_normal.jpg',
     // Thin red-orange atmosphere
@@ -179,7 +183,8 @@ export const PLANET_DATA = [
     orbitalPeriod: 11.86,
     rotationPeriod: 0.41,
     axialTilt: 3.1,
-    color: 0xd8ca9d,
+    color: 0xD4A574,      // Tan/caramel - banded appearance
+    albedo: 0.503,        // High reflectivity (revised upward)
     textureUrl: `${TEXTURE_BASE}/2k_jupiter.jpg`,
     // Subtle atmosphere glow
     atmosphere: {
@@ -212,7 +217,8 @@ export const PLANET_DATA = [
     orbitalPeriod: 29.46,
     rotationPeriod: 0.45,
     axialTilt: 26.7,
-    color: 0xead6b8,
+    color: 0xF4D58D,      // Pale golden, muted by haze
+    albedo: 0.342,        // Moderate reflectivity
     textureUrl: `${TEXTURE_BASE}/2k_saturn.jpg`,
     ringTextureUrl: `${TEXTURE_BASE}/2k_saturn_ring_alpha.png`,
     hasRings: true,
@@ -250,7 +256,8 @@ export const PLANET_DATA = [
     orbitalPeriod: 84.01,
     rotationPeriod: -0.72,
     axialTilt: 97.8,
-    color: 0xd1e7e7,
+    color: 0xAFDBF5,      // Pale greenish-blue
+    albedo: 0.349,        // Similar to Neptune
     textureUrl: `${TEXTURE_BASE}/2k_uranus.jpg`,
     // Uranus has faint rings
     hasRings: true,
@@ -290,7 +297,8 @@ export const PLANET_DATA = [
     orbitalPeriod: 164.8,
     rotationPeriod: 0.67,
     axialTilt: 28.3,
-    color: 0x5b5ddf,
+    color: 0x7EC8E3,      // Pale blue, similar to Uranus (NOT deep azure)
+    albedo: 0.290,        // Similar to Uranus
     textureUrl: `${TEXTURE_BASE}/2k_neptune.jpg`,
     // Blue atmosphere
     atmosphere: {

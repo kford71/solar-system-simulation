@@ -93,46 +93,9 @@ export class Planet {
     else if (this.data.name === 'Jupiter') {
       material = await this.createJupiterMaterial(geometry);
     }
-    // Standard material for other planets
+    // Standard material for other planets - use albedo-based shader
     else {
-      const materialOptions = {
-        color: this.data.color
-      };
-
-      // Load main texture
-      if (this.data.textureUrl) {
-        try {
-          const texture = await this.loadTexture(this.data.textureUrl);
-          materialOptions.map = texture;
-        } catch (e) {
-          console.warn(`Failed to load texture for ${this.data.name}, using color fallback`);
-        }
-      }
-
-      // Load normal map
-      if (this.data.normalMapUrl) {
-        try {
-          const normalMap = await this.loadTexture(this.data.normalMapUrl);
-          materialOptions.normalMap = normalMap;
-          materialOptions.normalScale = new THREE.Vector2(0.8, 0.8);
-        } catch (e) {
-          // Silently ignore
-        }
-      }
-
-      // Load specular map (for water reflections)
-      if (this.data.specularMapUrl) {
-        try {
-          const specularMap = await this.loadTexture(this.data.specularMapUrl);
-          materialOptions.metalnessMap = specularMap;
-          materialOptions.metalness = 0.1;
-          materialOptions.roughness = 0.7;
-        } catch (e) {
-          // Silently ignore
-        }
-      }
-
-      material = new THREE.MeshStandardMaterial(materialOptions);
+      material = await this.createAlbedoMaterial();
     }
 
     this.planetMesh = new THREE.Mesh(geometry, material);
@@ -381,6 +344,118 @@ export class Planet {
           vec3 normal = normalize(vNormal);
           float sunDot = max(0.1, dot(normal, sunDirection));
           vec3 finalColor = baseColor.rgb * sunDot;
+
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      `
+    });
+  }
+
+  /**
+   * Create material with albedo-based lighting
+   * Higher albedo planets appear brighter when lit by the Sun
+   * Mercury (albedo 0.068) will appear notably darker than Venus (albedo 0.77)
+   */
+  async createAlbedoMaterial() {
+    let texture = null;
+    let normalMap = null;
+
+    // Load main texture
+    if (this.data.textureUrl) {
+      try {
+        texture = await this.loadTexture(this.data.textureUrl);
+      } catch (e) {
+        console.warn(`Failed to load texture for ${this.data.name}, using color fallback`);
+      }
+    }
+
+    // Load normal map
+    if (this.data.normalMapUrl) {
+      try {
+        normalMap = await this.loadTexture(this.data.normalMapUrl);
+      } catch (e) {
+        // Silently ignore
+      }
+    }
+
+    // Get albedo value (default to 0.3 if not specified)
+    const albedo = this.data.albedo !== undefined ? this.data.albedo : 0.3;
+
+    // Create shader material with albedo-based lighting
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        planetTexture: { value: texture },
+        normalMap: { value: normalMap },
+        hasTexture: { value: texture !== null },
+        hasNormalMap: { value: normalMap !== null },
+        baseColor: { value: new THREE.Color(this.data.color) },
+        albedo: { value: albedo },
+        sunDirection: { value: new THREE.Vector3(1, 0, 0) }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vWorldPosition;
+        varying vec3 vViewPosition;
+
+        void main() {
+          vUv = uv;
+          vNormal = normalize(normalMatrix * normal);
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPos.xyz;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          vViewPosition = -mvPosition.xyz;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D planetTexture;
+        uniform sampler2D normalMap;
+        uniform bool hasTexture;
+        uniform bool hasNormalMap;
+        uniform vec3 baseColor;
+        uniform float albedo;
+        uniform vec3 sunDirection;
+
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vWorldPosition;
+        varying vec3 vViewPosition;
+
+        void main() {
+          // Get base color from texture or fallback
+          vec3 surfaceColor;
+          if (hasTexture) {
+            surfaceColor = texture2D(planetTexture, vUv).rgb;
+          } else {
+            surfaceColor = baseColor;
+          }
+
+          // Get normal (optionally from normal map)
+          vec3 normal = normalize(vNormal);
+
+          // Calculate lighting
+          float sunDot = dot(normal, sunDirection);
+
+          // Diffuse lighting with albedo affecting brightness
+          // Albedo determines how much light the surface reflects
+          // Scale from 0.068 (Mercury) to 0.77 (Venus)
+          float ambientLight = 0.08;  // Very dim ambient
+          float diffuse = max(0.0, sunDot);
+
+          // Apply albedo to affect overall brightness
+          // Normalize albedo effect: Mercury (0.068) is very dark, Venus (0.77) is brightest
+          // Use a scaled range so differences are visible but not extreme
+          float albedoFactor = 0.4 + (albedo * 0.8);  // Range: 0.45 to 1.02
+
+          // Final lighting calculation
+          float lighting = ambientLight + (diffuse * albedoFactor);
+
+          // Apply lighting to surface color
+          vec3 finalColor = surfaceColor * lighting;
+
+          // Slight boost to prevent completely black dark sides
+          finalColor = max(finalColor, surfaceColor * 0.03);
 
           gl_FragColor = vec4(finalColor, 1.0);
         }
