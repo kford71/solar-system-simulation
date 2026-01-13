@@ -662,6 +662,51 @@ export class Controls {
           visualData.glows.push({ planetName, glow });
         }
       });
+
+    } else if (event.type === 'eclipse') {
+      // Solar eclipse - show shadow cone from Moon to Earth
+      const earth = this.getPlanetByName('Earth');
+      if (earth && earth.moons && earth.moons.length > 0) {
+        const moon = earth.moons[0]; // The Moon
+
+        // Create shadow cone (umbra)
+        const coneGeometry = new THREE.ConeGeometry(0.15, 2.0, 16);
+        const coneMaterial = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        const shadowCone = new THREE.Mesh(coneGeometry, coneMaterial);
+        shadowCone.userData.type = 'eclipseShadowCone';
+        this.scene.add(shadowCone);
+        visualData.shadowCone = shadowCone;
+
+        // Create dark spot on Earth (umbra touchdown)
+        const spotGeometry = new THREE.CircleGeometry(0.08, 32);
+        const spotMaterial = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        const shadowSpot = new THREE.Mesh(spotGeometry, spotMaterial);
+        shadowSpot.userData.type = 'eclipseShadowSpot';
+        this.scene.add(shadowSpot);
+        visualData.shadowSpot = shadowSpot;
+
+        // Store moon reference for position updates
+        visualData.moonMesh = moon.mesh;
+        visualData.earthPlanet = earth;
+
+        // Glow on Earth during eclipse
+        const glow = this.createPlanetEventGlow('Earth', eventColor, 1.2);
+        if (glow) {
+          visualData.glows.push({ planetName: 'Earth', glow });
+        }
+      }
     }
 
     this.eventVisuals.activeEvents.set(eventKey, visualData);
@@ -800,6 +845,46 @@ export class Controls {
         }
       });
     }
+
+    // Update eclipse shadow cone and spot
+    if (event.type === 'eclipse' && visualData.shadowCone && visualData.moonMesh && visualData.earthPlanet) {
+      const moonPos = new THREE.Vector3();
+      visualData.moonMesh.getWorldPosition(moonPos);
+
+      const earthPos = visualData.earthPlanet.getWorldPosition();
+
+      // Calculate direction from Moon to Earth
+      const direction = new THREE.Vector3().subVectors(earthPos, moonPos).normalize();
+
+      // Position shadow cone between Moon and Earth
+      const coneLength = 2.0;
+      const conePos = moonPos.clone().add(direction.clone().multiplyScalar(coneLength / 2));
+      visualData.shadowCone.position.copy(conePos);
+
+      // Orient cone to point toward Earth
+      visualData.shadowCone.lookAt(earthPos);
+      visualData.shadowCone.rotateX(Math.PI / 2); // Cone points along Y, need to rotate
+
+      // Set opacity based on intensity
+      const coneOpacity = effectiveIntensity * 0.5;
+      visualData.shadowCone.material.opacity = coneOpacity;
+
+      // Position shadow spot on Earth's surface facing the Sun
+      const earthRadius = visualData.earthPlanet.data.radius;
+      // Direction from Earth to Sun (Sun is at origin)
+      const toSun = new THREE.Vector3().copy(earthPos).negate().normalize();
+      const spotPos = earthPos.clone().add(toSun.clone().multiplyScalar(-earthRadius * 1.01));
+      visualData.shadowSpot.position.copy(spotPos);
+      visualData.shadowSpot.lookAt(earthPos); // Face toward Earth center
+
+      // Set spot opacity with pulsing
+      const spotOpacity = effectiveIntensity * 0.7;
+      visualData.shadowSpot.material.opacity = spotOpacity;
+
+      // Scale the spot based on intensity
+      const spotScale = 0.5 + intensity * 0.5;
+      visualData.shadowSpot.scale.set(spotScale, spotScale, 1);
+    }
   }
 
   /**
@@ -836,6 +921,18 @@ export class Controls {
           planet.planetMesh.scale.copy(originalScale);
         }
       });
+    }
+
+    // Remove eclipse shadow cone and spot
+    if (visualData.shadowCone) {
+      this.scene.remove(visualData.shadowCone);
+      visualData.shadowCone.geometry.dispose();
+      visualData.shadowCone.material.dispose();
+    }
+    if (visualData.shadowSpot) {
+      this.scene.remove(visualData.shadowSpot);
+      visualData.shadowSpot.geometry.dispose();
+      visualData.shadowSpot.material.dispose();
     }
 
     this.eventVisuals.activeEvents.delete(eventKey);
