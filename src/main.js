@@ -218,7 +218,7 @@ function animate() {
   kuiperBelt.update(deltaTime, speedMultiplier);
 
   // Update comet
-  comet.update(deltaTime, speedMultiplier);
+  comet.update(deltaTime, speedMultiplier, elapsedTime, julianDate);
 
   // Update starfield (subtle rotation)
   starfield.update(deltaTime);
