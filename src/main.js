@@ -223,8 +223,8 @@ function animate() {
   // Update starfield (subtle rotation)
   starfield.update(deltaTime);
 
-  // Update controls (includes time display and minimap)
-  controls.update(deltaTime);
+  // Update controls (includes time display, minimap, and event visuals)
+  controls.update(deltaTime, elapsedTime);
 
   // Render with postprocessing
   composer.render();

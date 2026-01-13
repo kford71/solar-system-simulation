@@ -92,6 +92,14 @@ export class Controls {
     this.shownEventNotifications = new Set();
     this.activeNotifications = [];
 
+    // Event visual effects
+    this.eventVisuals = {
+      activeEvents: new Map(),      // Currently active event visuals
+      conjunctionLines: [],         // Lines connecting planets
+      planetGlows: new Map(),       // Glow sprites added to planets
+      originalScales: new Map()     // Store original planet scales
+    };
+
     this.init();
   }
 
@@ -514,6 +522,334 @@ export class Controls {
         this.activeNotifications.splice(index, 1);
       }
     }, 300);
+  }
+
+  /**
+   * Update visual effects for nearby astronomical events
+   */
+  updateEventVisuals(elapsedTime) {
+    const proximityDays = 30;
+    const activeEventKeys = new Set();
+
+    ASTRONOMICAL_EVENTS.forEach(event => {
+      if (!event.planets || event.planets.length === 0) return;
+
+      const eventDate = new Date(event.date);
+      const daysDiff = Math.floor((eventDate - this.startDate) / (1000 * 60 * 60 * 24));
+      const daysFromEvent = Math.abs(this.simulatedTime - daysDiff);
+
+      if (daysFromEvent <= proximityDays) {
+        const eventKey = `${event.date}-${event.name}`;
+        activeEventKeys.add(eventKey);
+
+        // Calculate intensity (1.0 on exact day, fading to 0 at ±30 days)
+        const intensity = 1 - (daysFromEvent / proximityDays);
+
+        // Create or update visuals for this event
+        if (!this.eventVisuals.activeEvents.has(eventKey)) {
+          this.createEventVisuals(event, eventKey);
+        }
+
+        // Update visuals with current intensity and time
+        this.updateEventVisualIntensity(event, eventKey, intensity, elapsedTime);
+      }
+    });
+
+    // Clean up visuals for events we've moved away from
+    for (const [eventKey, visualData] of this.eventVisuals.activeEvents) {
+      if (!activeEventKeys.has(eventKey)) {
+        this.removeEventVisuals(eventKey);
+      }
+    }
+  }
+
+  /**
+   * Create visual effects for an event
+   */
+  createEventVisuals(event, eventKey) {
+    const visualData = {
+      event: event,
+      lines: [],
+      glows: []
+    };
+
+    const eventColor = new THREE.Color(EVENT_COLORS[event.type] || '#ffffff');
+
+    if (event.type === 'conjunction' || event.type === 'occultation') {
+      // Create line connecting the two planets
+      if (event.planets.length >= 2) {
+        const lineMaterial = new THREE.LineBasicMaterial({
+          color: eventColor,
+          transparent: true,
+          opacity: 0,
+          linewidth: 2,
+          blending: THREE.AdditiveBlending
+        });
+
+        const lineGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(6); // 2 points x 3 coords
+        lineGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const line = new THREE.Line(lineGeometry, lineMaterial);
+        line.frustumCulled = false;
+        this.scene.add(line);
+        visualData.lines.push(line);
+      }
+
+      // Create glow sprites for involved planets
+      event.planets.forEach(planetName => {
+        const glow = this.createPlanetEventGlow(planetName, eventColor);
+        if (glow) {
+          visualData.glows.push({ planetName, glow });
+        }
+      });
+
+    } else if (event.type === 'approach') {
+      // For close approaches (like Mars), create enhanced glow
+      event.planets.forEach(planetName => {
+        const glow = this.createPlanetEventGlow(planetName, eventColor, 2.0);
+        if (glow) {
+          visualData.glows.push({ planetName, glow });
+        }
+
+        // Store original scale for restoration
+        const planet = this.getPlanetByName(planetName);
+        if (planet && planet.planetMesh) {
+          if (!this.eventVisuals.originalScales.has(planetName)) {
+            this.eventVisuals.originalScales.set(planetName, planet.planetMesh.scale.clone());
+          }
+        }
+      });
+
+    } else if (event.type === 'alignment') {
+      // Create connecting lines between all planets in alignment
+      const planets = event.planets.map(name => this.getPlanetByName(name)).filter(p => p);
+
+      for (let i = 0; i < planets.length - 1; i++) {
+        const lineMaterial = new THREE.LineBasicMaterial({
+          color: eventColor,
+          transparent: true,
+          opacity: 0,
+          linewidth: 1,
+          blending: THREE.AdditiveBlending
+        });
+
+        const lineGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(6);
+        lineGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const line = new THREE.Line(lineGeometry, lineMaterial);
+        line.frustumCulled = false;
+        line.userData.planetIndices = [i, i + 1];
+        line.userData.planetNames = [event.planets[i], event.planets[i + 1]];
+        this.scene.add(line);
+        visualData.lines.push(line);
+      }
+
+      // Subtle glow on all planets
+      event.planets.forEach(planetName => {
+        const glow = this.createPlanetEventGlow(planetName, eventColor, 0.6);
+        if (glow) {
+          visualData.glows.push({ planetName, glow });
+        }
+      });
+
+    } else if (event.type === 'transit') {
+      // Transit events - glow on the transiting planet
+      event.planets.forEach(planetName => {
+        const glow = this.createPlanetEventGlow(planetName, eventColor, 1.5);
+        if (glow) {
+          visualData.glows.push({ planetName, glow });
+        }
+      });
+    }
+
+    this.eventVisuals.activeEvents.set(eventKey, visualData);
+  }
+
+  /**
+   * Create a glow sprite for a planet during an event
+   */
+  createPlanetEventGlow(planetName, color, intensityMultiplier = 1.0) {
+    const planet = this.getPlanetByName(planetName);
+    if (!planet || !planet.planetMesh) return null;
+
+    // Create glow sprite
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+
+    const r = Math.floor(color.r * 255);
+    const g = Math.floor(color.g * 255);
+    const b = Math.floor(color.b * 255);
+
+    const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.8)`);
+    gradient.addColorStop(0.3, `rgba(${r}, ${g}, ${b}, 0.4)`);
+    gradient.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, 0.15)`);
+    gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 128, 128);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const sprite = new THREE.Sprite(spriteMaterial);
+    const baseSize = planet.data.radius * 4 * intensityMultiplier;
+    sprite.scale.set(baseSize, baseSize, 1);
+    sprite.userData.baseSize = baseSize;
+    sprite.userData.intensityMultiplier = intensityMultiplier;
+
+    planet.planetMesh.add(sprite);
+
+    return sprite;
+  }
+
+  /**
+   * Update visual intensity based on proximity to event date
+   */
+  updateEventVisualIntensity(event, eventKey, intensity, elapsedTime) {
+    const visualData = this.eventVisuals.activeEvents.get(eventKey);
+    if (!visualData) return;
+
+    // Pulsing effect
+    const pulse = 0.7 + 0.3 * Math.sin(elapsedTime * 3);
+    const effectiveIntensity = intensity * pulse;
+
+    // Update conjunction/occultation lines
+    if ((event.type === 'conjunction' || event.type === 'occultation') && visualData.lines.length > 0) {
+      const planet1 = this.getPlanetByName(event.planets[0]);
+      const planet2 = this.getPlanetByName(event.planets[1]);
+
+      if (planet1 && planet2) {
+        const pos1 = planet1.getWorldPosition();
+        const pos2 = planet2.getWorldPosition();
+
+        const line = visualData.lines[0];
+        const positions = line.geometry.attributes.position.array;
+        positions[0] = pos1.x;
+        positions[1] = pos1.y;
+        positions[2] = pos1.z;
+        positions[3] = pos2.x;
+        positions[4] = pos2.y;
+        positions[5] = pos2.z;
+        line.geometry.attributes.position.needsUpdate = true;
+
+        line.material.opacity = effectiveIntensity * 0.6;
+      }
+    }
+
+    // Update alignment lines
+    if (event.type === 'alignment') {
+      visualData.lines.forEach(line => {
+        const names = line.userData.planetNames;
+        if (names && names.length === 2) {
+          const planet1 = this.getPlanetByName(names[0]);
+          const planet2 = this.getPlanetByName(names[1]);
+
+          if (planet1 && planet2) {
+            const pos1 = planet1.getWorldPosition();
+            const pos2 = planet2.getWorldPosition();
+
+            const positions = line.geometry.attributes.position.array;
+            positions[0] = pos1.x;
+            positions[1] = pos1.y;
+            positions[2] = pos1.z;
+            positions[3] = pos2.x;
+            positions[4] = pos2.y;
+            positions[5] = pos2.z;
+            line.geometry.attributes.position.needsUpdate = true;
+
+            line.material.opacity = effectiveIntensity * 0.3;
+          }
+        }
+      });
+    }
+
+    // Update planet glows
+    visualData.glows.forEach(({ planetName, glow }) => {
+      if (glow && glow.material) {
+        const glowIntensity = effectiveIntensity * (glow.userData.intensityMultiplier || 1.0);
+        glow.material.opacity = glowIntensity * 0.8;
+
+        // Pulsing scale
+        const baseSize = glow.userData.baseSize || 1;
+        const scaleMultiplier = 1 + 0.15 * Math.sin(elapsedTime * 4);
+        glow.scale.set(baseSize * scaleMultiplier, baseSize * scaleMultiplier, 1);
+      }
+    });
+
+    // Scale up planets for close approaches
+    if (event.type === 'approach') {
+      event.planets.forEach(planetName => {
+        const planet = this.getPlanetByName(planetName);
+        if (planet && planet.planetMesh) {
+          const originalScale = this.eventVisuals.originalScales.get(planetName);
+          if (originalScale) {
+            const scaleBoost = 1 + (0.2 * intensity); // Up to 1.2x at peak
+            planet.planetMesh.scale.copy(originalScale).multiplyScalar(scaleBoost);
+          }
+        }
+      });
+    }
+  }
+
+  /**
+   * Remove visual effects for an event
+   */
+  removeEventVisuals(eventKey) {
+    const visualData = this.eventVisuals.activeEvents.get(eventKey);
+    if (!visualData) return;
+
+    // Remove lines
+    visualData.lines.forEach(line => {
+      this.scene.remove(line);
+      line.geometry.dispose();
+      line.material.dispose();
+    });
+
+    // Remove glows
+    visualData.glows.forEach(({ planetName, glow }) => {
+      if (glow && glow.parent) {
+        glow.parent.remove(glow);
+        if (glow.material.map) {
+          glow.material.map.dispose();
+        }
+        glow.material.dispose();
+      }
+    });
+
+    // Restore original scales for approach events
+    if (visualData.event.type === 'approach') {
+      visualData.event.planets.forEach(planetName => {
+        const planet = this.getPlanetByName(planetName);
+        const originalScale = this.eventVisuals.originalScales.get(planetName);
+        if (planet && planet.planetMesh && originalScale) {
+          planet.planetMesh.scale.copy(originalScale);
+        }
+      });
+    }
+
+    this.eventVisuals.activeEvents.delete(eventKey);
+  }
+
+  /**
+   * Get a planet object by name
+   */
+  getPlanetByName(name) {
+    let planet = this.planets.find(p => p.data.name === name);
+    if (!planet) {
+      planet = this.dwarfPlanets.find(p => p.data.name === name);
+    }
+    return planet;
   }
 
   /**
@@ -1153,13 +1489,14 @@ export class Controls {
     return this.settings.paused;
   }
 
-  update(deltaTime) {
+  update(deltaTime, elapsedTime = 0) {
     this.orbitControls.update();
     this.updateCameraAnimation();
     this.updateLabels();
     this.updateTimeDisplay(deltaTime);
     this.updateMinimap();
     this.updateDistanceDisplay();
+    this.updateEventVisuals(elapsedTime);
   }
 
   dispose() {
