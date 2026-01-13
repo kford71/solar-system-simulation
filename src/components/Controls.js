@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 import { TIME_CONSTANTS, DISTANCE_SCALE } from '../data/planetData.js';
+import { ASTRONOMICAL_EVENTS, EVENT_COLORS } from '../data/astronomicalEvents.js';
 import { AudioSystem } from './AudioSystem.js';
 import { dateToJulianDate, julianDateToDate } from '../utils/OrbitalMechanics.js';
 
@@ -294,6 +295,7 @@ export class Controls {
     timeDisplay.innerHTML = `
       <div class="time-date" id="sim-date">January 1, 2024</div>
       <div class="time-controls">
+        <div class="event-markers" id="event-markers"></div>
         <input type="range" id="time-slider" min="-36500" max="36500" value="0" step="1">
         <div class="time-labels">
           <span>-100 years</span>
@@ -301,6 +303,7 @@ export class Controls {
           <span>+100 years</span>
         </div>
       </div>
+      <div class="event-tooltip" id="event-tooltip"></div>
     `;
     container.appendChild(timeDisplay);
 
@@ -308,6 +311,82 @@ export class Controls {
     const slider = document.getElementById('time-slider');
     slider.addEventListener('input', (e) => {
       this.simulatedTime = parseFloat(e.target.value);
+    });
+
+    // Create event markers
+    this.createEventMarkers();
+  }
+
+  /**
+   * Create event markers on the timeline
+   */
+  createEventMarkers() {
+    const markersContainer = document.getElementById('event-markers');
+    const tooltip = document.getElementById('event-tooltip');
+
+    // Timeline range: -36500 to 36500 days from start date (Jan 1, 2024)
+    const minDays = -36500;
+    const maxDays = 36500;
+    const totalRange = maxDays - minDays;
+
+    ASTRONOMICAL_EVENTS.forEach(event => {
+      const eventDate = new Date(event.date);
+      const daysDiff = Math.floor((eventDate - this.startDate) / (1000 * 60 * 60 * 24));
+
+      // Skip events outside the timeline range
+      if (daysDiff < minDays || daysDiff > maxDays) return;
+
+      // Calculate position as percentage
+      const position = ((daysDiff - minDays) / totalRange) * 100;
+
+      // Create marker element
+      const marker = document.createElement('div');
+      marker.className = 'event-marker';
+      marker.style.left = `${position}%`;
+      marker.style.backgroundColor = EVENT_COLORS[event.type] || '#ffffff';
+      marker.dataset.date = event.date;
+      marker.dataset.name = event.name;
+      marker.dataset.days = daysDiff;
+
+      // Hover events
+      marker.addEventListener('mouseenter', (e) => {
+        const formattedDate = eventDate.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+        tooltip.innerHTML = `<strong>${formattedDate}</strong><br>${event.name}`;
+        tooltip.style.display = 'block';
+
+        // Position tooltip above the marker
+        const rect = marker.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        const containerRect = markersContainer.getBoundingClientRect();
+
+        // Center tooltip on marker, but keep within bounds
+        let left = rect.left + rect.width / 2 - tooltipRect.width / 2;
+        left = Math.max(containerRect.left, Math.min(left, containerRect.right - tooltipRect.width));
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${rect.top - tooltipRect.height - 8}px`;
+      });
+
+      marker.addEventListener('mouseleave', () => {
+        tooltip.style.display = 'none';
+      });
+
+      // Click to jump to date
+      marker.addEventListener('click', () => {
+        this.simulatedTime = daysDiff;
+        const slider = document.getElementById('time-slider');
+        if (slider) {
+          slider.value = daysDiff;
+        }
+        // Play a sound effect
+        this.audioSystem.playSelectSound('event');
+      });
+
+      markersContainer.appendChild(marker);
     });
   }
 
