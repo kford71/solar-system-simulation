@@ -22,13 +22,14 @@ import { AudioSystem } from './AudioSystem.js';
 import { dateToJulianDate, julianDateToDate } from '../utils/OrbitalMechanics.js';
 
 export class Controls {
-  constructor(camera, renderer, scene, planets, sun, dwarfPlanets = []) {
+  constructor(camera, renderer, scene, planets, sun, dwarfPlanets = [], comet = null) {
     this.camera = camera;
     this.renderer = renderer;
     this.scene = scene;
     this.planets = planets;
     this.dwarfPlanets = dwarfPlanets;
     this.sun = sun;
+    this.comet = comet;
 
     // Settings
     this.settings = {
@@ -135,7 +136,8 @@ export class Controls {
     const allBodies = [
       'Sun',
       ...this.planets.map(p => p.data.name),
-      ...this.dwarfPlanets.map(p => p.data.name)
+      ...this.dwarfPlanets.map(p => p.data.name),
+      ...(this.comet ? ["Halley's Comet"] : [])
     ];
 
     cameraFolder.add(this.settings, 'focusedPlanet', ['None', ...allBodies])
@@ -216,6 +218,10 @@ export class Controls {
         case 'C':
           this.focusByName('Ceres');
           break;
+        case 'h':
+        case 'H':
+          this.focusByName("Halley's Comet");
+          break;
         case ' ':
           event.preventDefault();
           this.settings.paused = !this.settings.paused;
@@ -255,6 +261,13 @@ export class Controls {
     if (name === 'Sun') {
       this.focusOnObject(this.sun.getMesh());
       this.showSunInfo();
+      return;
+    }
+
+    // Check comet
+    if (name === "Halley's Comet" && this.comet) {
+      this.focusOnComet();
+      this.showCometInfo();
       return;
     }
 
@@ -478,6 +491,21 @@ export class Controls {
       });
       container.appendChild(label);
     });
+
+    // Comet label
+    if (this.comet) {
+      const cometLabel = this.createLabel("Halley's Comet");
+      cometLabel.style.cursor = 'pointer';
+      cometLabel.addEventListener('click', () => {
+        this.selectCometFromLabel();
+      });
+      this.labels.push({
+        element: cometLabel,
+        comet: this.comet,
+        offset: new THREE.Vector3(0, 3, 0)  // Offset above the comet
+      });
+      container.appendChild(cometLabel);
+    }
   }
 
   createLabel(text) {
@@ -498,6 +526,9 @@ export class Controls {
         position.add(labelData.offset);
       } else if (labelData.moonMesh) {
         labelData.moonMesh.getWorldPosition(position);
+        position.add(labelData.offset);
+      } else if (labelData.comet) {
+        position = labelData.comet.getWorldPosition();
         position.add(labelData.offset);
       } else if (labelData.object) {
         labelData.object.getWorldPosition(position);
@@ -582,6 +613,11 @@ export class Controls {
       objects.push(...planet.getClickableObjects());
     });
 
+    // Add comet clickable objects
+    if (this.comet) {
+      objects.push(...this.comet.getClickableObjects());
+    }
+
     return objects;
   }
 
@@ -644,6 +680,14 @@ export class Controls {
         this.audioSystem.playFocusSound(moon.data.name);
         return;
       }
+    }
+
+    // Check if it's the comet
+    if (object.userData.isComet && this.comet) {
+      this.showCometInfo();
+      this.focusOnComet();
+      this.audioSystem.playFocusSound("Halley's Comet");
+      return;
     }
   }
 
@@ -736,6 +780,68 @@ export class Controls {
 
     factsEl.innerHTML = html;
     panel.classList.remove('hidden');
+  }
+
+  /**
+   * Show comet info panel
+   */
+  showCometInfo() {
+    if (!this.comet) return;
+
+    const panel = document.getElementById('info-panel');
+    const nameEl = document.getElementById('planet-name');
+    const factsEl = document.getElementById('planet-facts');
+
+    nameEl.textContent = "Halley's Comet";
+
+    let html = `<div class="planet-icon" style="background: radial-gradient(circle, #aaddff, #4466aa);"></div>`;
+    html += `<p><strong>Designation:</strong> ${this.comet.data.designation}</p>`;
+
+    // Orbital information
+    html += `<div class="distance-indicator">
+      <p><strong>Orbital Elements:</strong></p>
+      <p>Period: ${this.comet.data.orbitalPeriod.toFixed(2)} years</p>
+      <p>Perihelion: ${this.comet.data.perihelion.toFixed(3)} AU</p>
+      <p>Aphelion: ${this.comet.data.aphelion.toFixed(2)} AU</p>
+      <p>Eccentricity: ${this.comet.data.eccentricity.toFixed(4)}</p>
+      <p>Inclination: ${this.comet.data.inclination.toFixed(2)}° (retrograde)</p>
+    </div>`;
+
+    // Perihelion dates
+    html += `<p><strong>Last Perihelion:</strong> ${this.comet.data.lastPerihelion.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>`;
+    html += `<p><strong>Next Perihelion:</strong> ${this.comet.data.nextPerihelion.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>`;
+
+    // Facts
+    const facts = this.comet.data.facts;
+    if (facts) {
+      for (const [key, value] of Object.entries(facts)) {
+        const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+        html += `<p><strong>${label}:</strong> ${value}</p>`;
+      }
+    }
+
+    factsEl.innerHTML = html;
+    panel.classList.remove('hidden');
+  }
+
+  /**
+   * Focus camera on the comet
+   */
+  focusOnComet() {
+    if (!this.comet) return;
+    const targetPosition = this.comet.getWorldPosition();
+    this.animateCameraTo(targetPosition, 15);  // Distance of 15 units for good view of tail
+  }
+
+  /**
+   * Handle clicking on comet label
+   */
+  selectCometFromLabel() {
+    if (!this.comet) return;
+    this.audioSystem.playSelectSound("Halley's Comet");
+    this.showCometInfo();
+    this.focusOnComet();
+    this.audioSystem.playFocusSound("Halley's Comet");
   }
 
   closeInfoPanel() {

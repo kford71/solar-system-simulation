@@ -40,6 +40,7 @@ export class Comet {
     this.group.name = "Halley's Comet";
 
     this.nucleus = null;
+    this.hitbox = null;         // Larger invisible sphere for click detection
     this.coma = null;           // Glowing halo around nucleus
     this.dustTail = null;       // Curved dust tail
     this.ionTail = null;        // Straight ion tail
@@ -57,6 +58,7 @@ export class Comet {
 
   init() {
     this.createNucleus();
+    this.createHitbox();
     this.createComa();
     this.createDustTail();
     this.createIonTail();
@@ -159,6 +161,31 @@ export class Comet {
     };
 
     this.group.add(this.nucleus);
+  }
+
+  /**
+   * Create a larger invisible sphere for easier click detection
+   */
+  createHitbox() {
+    // Much larger hitbox (2.5 units radius) for easy clicking
+    const geometry = new THREE.SphereGeometry(2.5, 16, 16);
+    const material = new THREE.MeshBasicMaterial({
+      visible: false,  // Invisible but still raycastable
+      transparent: true,
+      opacity: 0
+    });
+
+    this.hitbox = new THREE.Mesh(geometry, material);
+    this.hitbox.name = "Halley's Comet";
+    this.hitbox.userData = {
+      type: 'celestialBody',
+      name: "Halley's Comet",
+      clickable: true,
+      isComet: true,
+      facts: this.data.facts
+    };
+
+    this.group.add(this.hitbox);
   }
 
   /**
@@ -373,6 +400,22 @@ export class Comet {
   }
 
   /**
+   * Get clickable objects for raycasting (hitbox for easier clicking)
+   */
+  getClickableObjects() {
+    return [this.hitbox];
+  }
+
+  /**
+   * Get world position of the comet nucleus
+   */
+  getWorldPosition() {
+    const position = new THREE.Vector3();
+    this.nucleus.getWorldPosition(position);
+    return position;
+  }
+
+  /**
    * Set position for a specific Julian Date
    */
   setPositionForDate(julianDate) {
@@ -388,6 +431,7 @@ export class Comet {
     const z = pos.y * DISTANCE_SCALE;
 
     this.nucleus.position.set(x, y, z);
+    this.hitbox.position.copy(this.nucleus.position);
     this.coma.position.copy(this.nucleus.position);
 
     // Calculate tail properties based on distance from Sun
@@ -488,6 +532,10 @@ export class Comet {
     if (this.nucleus) {
       this.nucleus.geometry.dispose();
       this.nucleus.material.dispose();
+    }
+    if (this.hitbox) {
+      this.hitbox.geometry.dispose();
+      this.hitbox.material.dispose();
     }
     if (this.coma) {
       this.coma.material.map.dispose();

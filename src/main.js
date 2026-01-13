@@ -172,7 +172,7 @@ async function createSolarSystem() {
  * Setup interactive controls
  */
 function setupControls() {
-  controls = new Controls(camera, renderer, scene, planets, sun, dwarfPlanets);
+  controls = new Controls(camera, renderer, scene, planets, sun, dwarfPlanets, comet);
 }
 
 /**
