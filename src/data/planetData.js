@@ -193,6 +193,13 @@ export const PLANET_DATA = [
       scale: 1.02
     },
     moons: ['Io', 'Europa', 'Ganymede', 'Callisto'],
+    // Jupiter's faint dusty rings (very low opacity, forward-scattering)
+    hasRings: true,
+    ringType: 'jupiter',
+    ringBands: [
+      { name: 'Halo', inner: 1.29, outer: 1.71, color: 0x8899aa, opacity: 0.04 },
+      { name: 'Main Ring', inner: 1.71, outer: 1.80, color: 0xaa7766, opacity: 0.08 }
+    ],
     earthComparison: {
       sizeRatio: 11.21,
       gravityRatio: 2.53,
@@ -206,6 +213,7 @@ export const PLANET_DATA = [
       moons: 95,
       temperature: '-110°C (cloud tops)',
       atmosphere: '90% Hydrogen, 10% Helium',
+      rings: 'Faint dusty rings (discovered 1979)',
       gravity: '24.79 m/s²',
       escapeVelocity: '59.5 km/s'
     }
@@ -220,10 +228,17 @@ export const PLANET_DATA = [
     color: 0xF4D58D,      // Pale golden, muted by haze
     albedo: 0.342,        // Moderate reflectivity
     textureUrl: `${TEXTURE_BASE}/2k_saturn.jpg`,
-    ringTextureUrl: `${TEXTURE_BASE}/2k_saturn_ring_alpha.png`,
+    // Saturn's prominent icy ring system with Cassini Division
     hasRings: true,
-    ringInnerRadius: 1.2,
-    ringOuterRadius: 2.3,
+    ringType: 'saturn',
+    ringBands: [
+      { name: 'D Ring', inner: 1.11, outer: 1.24, color: 0xccccbb, opacity: 0.15 },
+      { name: 'C Ring', inner: 1.24, outer: 1.53, color: 0xbbbbaa, opacity: 0.35 },
+      { name: 'B Ring', inner: 1.53, outer: 1.95, color: 0xeeddcc, opacity: 0.85 },
+      { name: 'Cassini Division', inner: 1.95, outer: 2.03, color: 0x222222, opacity: 0.05 },
+      { name: 'A Ring', inner: 2.03, outer: 2.27, color: 0xddccbb, opacity: 0.70 },
+      { name: 'F Ring', inner: 2.32, outer: 2.35, color: 0xccbbaa, opacity: 0.25 }
+    ],
     // Subtle golden atmosphere
     atmosphere: {
       color: 0xffeecc,
@@ -259,12 +274,15 @@ export const PLANET_DATA = [
     color: 0xAFDBF5,      // Pale greenish-blue
     albedo: 0.349,        // Similar to Neptune
     textureUrl: `${TEXTURE_BASE}/2k_uranus.jpg`,
-    // Uranus has faint rings
+    // Uranus's dark charcoal-colored rings (very low albedo ~2%)
     hasRings: true,
-    ringInnerRadius: 1.6,
-    ringOuterRadius: 2.0,
-    ringColor: 0x6688aa,
-    ringOpacity: 0.3,
+    ringType: 'uranus',
+    ringBands: [
+      { name: 'Inner Rings (6,5,4,α,β)', inner: 1.64, outer: 1.75, color: 0x333333, opacity: 0.20 },
+      { name: 'Inner Rings (η,γ,δ)', inner: 1.75, outer: 1.89, color: 0x3a3a3a, opacity: 0.25 },
+      { name: 'Epsilon Ring', inner: 1.98, outer: 2.02, color: 0x404040, opacity: 0.35 },
+      { name: 'Mu Ring', inner: 3.75, outer: 3.90, color: 0x556688, opacity: 0.08 }
+    ],
     // Cyan atmosphere
     atmosphere: {
       color: 0x99ddff,
@@ -300,6 +318,14 @@ export const PLANET_DATA = [
     color: 0x7EC8E3,      // Pale blue, similar to Uranus (NOT deep azure)
     albedo: 0.290,        // Similar to Uranus
     textureUrl: `${TEXTURE_BASE}/2k_neptune.jpg`,
+    // Neptune's faint dark reddish-brown rings
+    hasRings: true,
+    ringType: 'neptune',
+    ringBands: [
+      { name: 'Galle Ring', inner: 1.66, outer: 1.74, color: 0x554433, opacity: 0.06 },
+      { name: 'Le Verrier Ring', inner: 2.13, outer: 2.17, color: 0x665544, opacity: 0.10 },
+      { name: 'Adams Ring', inner: 2.52, outer: 2.56, color: 0x665544, opacity: 0.12 }
+    ],
     // Blue atmosphere
     atmosphere: {
       color: 0x4466ff,

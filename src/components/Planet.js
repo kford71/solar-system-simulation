@@ -665,11 +665,24 @@ export class Planet {
   }
 
   /**
-   * Create planetary rings (Saturn or Uranus)
+   * Create planetary rings using accurate band data
    */
   async createRings() {
-    const innerRadius = this.data.radius * this.data.ringInnerRadius;
-    const outerRadius = this.data.radius * this.data.ringOuterRadius;
+    if (!this.data.ringBands || this.data.ringBands.length === 0) {
+      // Fallback for planets without detailed ring data
+      return this.createLegacyRings();
+    }
+
+    // Find the overall inner and outer radius from ring bands
+    let minInner = Infinity;
+    let maxOuter = 0;
+    this.data.ringBands.forEach(band => {
+      minInner = Math.min(minInner, band.inner);
+      maxOuter = Math.max(maxOuter, band.outer);
+    });
+
+    const innerRadius = this.data.radius * minInner;
+    const outerRadius = this.data.radius * maxOuter;
 
     const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 128);
 
@@ -684,24 +697,46 @@ export class Planet {
       uv.setXY(i, normalizedDist, 0.5);
     }
 
-    // Different ring styles for different planets
-    let ringTexture;
-    const isUranus = this.data.name === 'Uranus';
+    // Create accurate ring texture based on band data
+    const ringTexture = this.createAccurateRingTexture(minInner, maxOuter);
 
-    if (this.data.ringTextureUrl) {
-      try {
-        ringTexture = await this.loadTexture(this.data.ringTextureUrl);
-      } catch (e) {
-        ringTexture = isUranus
-          ? this.createUranusRingTexture()
-          : this.createSaturnRingTexture();
-      }
-    } else {
-      ringTexture = isUranus
-        ? this.createUranusRingTexture()
-        : this.createSaturnRingTexture();
+    const material = new THREE.MeshStandardMaterial({
+      map: ringTexture,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 1.0,  // Opacity is baked into texture
+      alphaTest: 0.01,
+      depthWrite: false
+    });
+
+    this.ringMesh = new THREE.Mesh(geometry, material);
+    this.ringMesh.rotation.x = Math.PI / 2;
+    this.ringMesh.position.copy(this.planetMesh.position);
+    this.ringMesh.renderOrder = 1;
+
+    this.axisGroup.add(this.ringMesh);
+  }
+
+  /**
+   * Fallback for planets without detailed ring band data
+   */
+  async createLegacyRings() {
+    const innerRadius = this.data.radius * (this.data.ringInnerRadius || 1.2);
+    const outerRadius = this.data.radius * (this.data.ringOuterRadius || 2.3);
+
+    const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 128);
+
+    const pos = geometry.attributes.position;
+    const uv = geometry.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const distance = Math.sqrt(x * x + y * y);
+      const normalizedDist = (distance - innerRadius) / (outerRadius - innerRadius);
+      uv.setXY(i, normalizedDist, 0.5);
     }
 
+    const ringTexture = this.createSaturnRingTexture();
     const ringOpacity = this.data.ringOpacity || 0.9;
 
     const material = new THREE.MeshStandardMaterial({
@@ -716,6 +751,105 @@ export class Planet {
     this.ringMesh.position.copy(this.planetMesh.position);
 
     this.axisGroup.add(this.ringMesh);
+  }
+
+  /**
+   * Create accurate ring texture based on ring band data
+   */
+  createAccurateRingTexture(minInner, maxOuter) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2048;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+
+    // Clear to transparent
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const totalRange = maxOuter - minInner;
+
+    // Draw each ring band
+    this.data.ringBands.forEach(band => {
+      const startX = ((band.inner - minInner) / totalRange) * canvas.width;
+      const endX = ((band.outer - minInner) / totalRange) * canvas.width;
+      const bandWidth = endX - startX;
+
+      // Convert hex color to RGB
+      const color = new THREE.Color(band.color);
+      const r = Math.floor(color.r * 255);
+      const g = Math.floor(color.g * 255);
+      const b = Math.floor(color.b * 255);
+
+      // Create gradient for smooth edges
+      const gradient = ctx.createLinearGradient(startX, 0, endX, 0);
+      const edgeFade = Math.min(0.1, 10 / bandWidth);
+
+      gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
+      gradient.addColorStop(edgeFade, `rgba(${r}, ${g}, ${b}, ${band.opacity})`);
+      gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${band.opacity})`);
+      gradient.addColorStop(1 - edgeFade, `rgba(${r}, ${g}, ${b}, ${band.opacity})`);
+      gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(startX, 0, bandWidth, canvas.height);
+    });
+
+    // Add fine detail noise for realism (varies by planet type)
+    this.addRingNoise(ctx, canvas.width, canvas.height);
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  /**
+   * Add noise and detail to ring texture based on planet type
+   */
+  addRingNoise(ctx, width, height) {
+    const ringType = this.data.ringType || 'saturn';
+
+    if (ringType === 'saturn') {
+      // Saturn: More visible texture, icy particles
+      for (let i = 0; i < 5000; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        const alpha = Math.random() * 0.15;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+      // Add darker streaks
+      for (let i = 0; i < 2000; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        const alpha = Math.random() * 0.1;
+        ctx.fillStyle = `rgba(100, 80, 60, ${alpha})`;
+        ctx.fillRect(x, y, 2, 1);
+      }
+    } else if (ringType === 'jupiter') {
+      // Jupiter: Very faint dusty texture
+      for (let i = 0; i < 500; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        const alpha = Math.random() * 0.05;
+        ctx.fillStyle = `rgba(200, 150, 100, ${alpha})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    } else if (ringType === 'uranus') {
+      // Uranus: Dark charcoal with minimal texture
+      for (let i = 0; i < 300; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        const alpha = Math.random() * 0.08;
+        ctx.fillStyle = `rgba(80, 80, 80, ${alpha})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    } else if (ringType === 'neptune') {
+      // Neptune: Very faint dusty texture
+      for (let i = 0; i < 200; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        const alpha = Math.random() * 0.04;
+        ctx.fillStyle = `rgba(100, 80, 70, ${alpha})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
   }
 
   /**
