@@ -11,10 +11,14 @@
  */
 
 import * as THREE from 'three';
-import { COMET_DATA, DISTANCE_SCALE } from '../data/planetData.js';
-
-// Constants for orbital calculations
-const DEG_TO_RAD = Math.PI / 180;
+import {
+  COMET_DATA,
+  DISTANCE_SCALE,
+  DEG_TO_RAD,
+  TWO_PI,
+  SOLVER_CONFIG,
+  COMET_CONFIG
+} from '../data/planetData.js';
 
 export class Comet {
   constructor(options = {}) {
@@ -49,9 +53,9 @@ export class Comet {
     // Current Julian Date for position calculation
     this.currentJulianDate = null;
 
-    // Tail particle count
-    this.dustTailCount = 250;
-    this.ionTailCount = 150;
+    // Tail particle count from config
+    this.dustTailCount = COMET_CONFIG.dustTailCount;
+    this.ionTailCount = COMET_CONFIG.ionTailCount;
 
     this.init();
   }
@@ -71,19 +75,17 @@ export class Comet {
    */
   solveKepler(M, e) {
     // Normalize M to 0-2PI
-    M = M % (2 * Math.PI);
-    if (M < 0) M += 2 * Math.PI;
+    M = M % TWO_PI;
+    if (M < 0) M += TWO_PI;
 
     // Initial guess
     let E = M + e * Math.sin(M) * (1 + e * Math.cos(M));
 
     // Newton-Raphson iteration
-    const tolerance = 1e-10;
     let delta = 1;
     let iterations = 0;
-    const maxIterations = 30;
 
-    while (Math.abs(delta) > tolerance && iterations < maxIterations) {
+    while (Math.abs(delta) > SOLVER_CONFIG.keplerTolerance && iterations < SOLVER_CONFIG.maxIterations) {
       delta = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
       E -= delta;
       iterations++;
@@ -142,7 +144,7 @@ export class Comet {
    */
   createNucleus() {
     // Halley's nucleus is about 11km x 8km - make it visually small
-    const geometry = new THREE.SphereGeometry(0.12, 16, 16);
+    const geometry = new THREE.SphereGeometry(COMET_CONFIG.nucleusRadius, 16, 16);
 
     // Dark, irregular material (Halley's nucleus has very low albedo ~0.04)
     const material = new THREE.MeshStandardMaterial({
@@ -167,8 +169,8 @@ export class Comet {
    * Create a larger invisible sphere for easier click detection
    */
   createHitbox() {
-    // Much larger hitbox (2.5 units radius) for easy clicking
-    const geometry = new THREE.SphereGeometry(2.5, 16, 16);
+    // Much larger hitbox for easy clicking
+    const geometry = new THREE.SphereGeometry(COMET_CONFIG.hitboxRadius, 16, 16);
     const material = new THREE.MeshBasicMaterial({
       visible: false,  // Invisible but still raycastable
       transparent: true,
@@ -344,11 +346,11 @@ export class Comet {
    */
   createOrbitLine() {
     const points = [];
-    const segments = 512;  // More segments for smooth ellipse
+    const segments = COMET_CONFIG.orbitSegments;
 
     for (let i = 0; i <= segments; i++) {
       // True anomaly from 0 to 2PI
-      const nu = (i / segments) * Math.PI * 2;
+      const nu = (i / segments) * TWO_PI;
 
       // Distance at this true anomaly
       const r = (this.semiMajorAxis * (1 - this.eccentricity * this.eccentricity)) /

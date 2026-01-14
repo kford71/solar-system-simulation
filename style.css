@@ -22,29 +22,70 @@ body {
   height: 100%;
 }
 
+/* Subtle vignette overlay for cinematic feel */
+#app::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 10, 0.4) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* Info Panel - positioned on LEFT to avoid overlap with controls */
 #info-panel {
   position: fixed;
   top: 20px;
   left: 20px;
-  width: 320px;
+  width: 340px;
   max-height: 80vh;
   overflow-y: auto;
-  background: rgba(10, 10, 30, 0.98);
-  border: 1px solid rgba(100, 150, 255, 0.4);
-  border-radius: 12px;
-  padding: 20px;
+  background: linear-gradient(135deg, rgba(10, 15, 40, 0.98) 0%, rgba(5, 10, 25, 0.98) 100%);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 16px;
+  padding: 24px;
   color: #fff;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 4px 30px rgba(0, 100, 255, 0.3);
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 8px 40px rgba(0, 50, 150, 0.4),
+    0 0 1px rgba(100, 150, 255, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   z-index: 200;
-  transition: transform 0.3s ease, opacity 0.3s ease;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+}
+
+#info-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(100, 150, 255, 0.5), transparent);
 }
 
 #info-panel.hidden {
-  transform: translateX(-350px);
+  transform: translateX(-380px) scale(0.95);
   opacity: 0;
   pointer-events: none;
+}
+
+#info-panel.visible {
+  animation: panelSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes panelSlideIn {
+  from {
+    transform: translateX(-100px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
 }
 
 #info-panel::-webkit-scrollbar {
@@ -78,10 +119,22 @@ body {
 }
 
 #planet-name {
-  margin-bottom: 15px;
-  font-size: 1.5rem;
+  margin-bottom: 18px;
+  font-size: 1.6rem;
+  font-weight: 300;
+  letter-spacing: 2px;
   color: #88ccff;
-  text-shadow: 0 0 10px rgba(100, 150, 255, 0.5);
+  text-shadow: 0 0 20px rgba(100, 150, 255, 0.6);
+  background: linear-gradient(135deg, #88ccff 0%, #aaddff 50%, #88ccff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: nameGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes nameGlow {
+  from { filter: drop-shadow(0 0 8px rgba(100, 150, 255, 0.4)); }
+  to { filter: drop-shadow(0 0 15px rgba(100, 150, 255, 0.7)); }
 }
 
 #planet-facts {
@@ -154,19 +207,187 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: radial-gradient(ellipse at center, #0a0a1a 0%, #000008 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 1.5rem;
   z-index: 1000;
-  transition: opacity 0.5s ease;
+  transition: opacity 0.8s ease, transform 0.8s ease;
 }
 
 #loading.hidden {
   opacity: 0;
+  transform: scale(1.1);
   pointer-events: none;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+}
+
+/* Animated Solar System */
+.loading-solar-system {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+
+.loading-sun {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  background: radial-gradient(circle, #ffdd44 0%, #ff9900 50%, #ff6600 100%);
+  border-radius: 50%;
+  box-shadow:
+    0 0 30px rgba(255, 200, 50, 0.8),
+    0 0 60px rgba(255, 150, 50, 0.5),
+    0 0 90px rgba(255, 100, 0, 0.3);
+  animation: sunPulse 2s ease-in-out infinite;
+}
+
+@keyframes sunPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 30px rgba(255, 200, 50, 0.8), 0 0 60px rgba(255, 150, 50, 0.5); }
+  50% { transform: scale(1.05); box-shadow: 0 0 40px rgba(255, 200, 50, 0.9), 0 0 80px rgba(255, 150, 50, 0.6); }
+}
+
+.loading-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px solid rgba(100, 150, 255, 0.15);
+  border-radius: 50%;
+}
+
+.loading-orbit-1 {
+  width: 70px;
+  height: 70px;
+  margin: -35px 0 0 -35px;
+  animation: orbitSpin 3s linear infinite;
+}
+
+.loading-orbit-2 {
+  width: 110px;
+  height: 110px;
+  margin: -55px 0 0 -55px;
+  animation: orbitSpin 5s linear infinite;
+}
+
+.loading-orbit-3 {
+  width: 160px;
+  height: 160px;
+  margin: -80px 0 0 -80px;
+  animation: orbitSpin 8s linear infinite;
+}
+
+@keyframes orbitSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.loading-planet {
+  position: absolute;
+  border-radius: 50%;
+  top: -4px;
+  left: 50%;
+  margin-left: -4px;
+}
+
+.loading-planet-1 {
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle, #a0a0a0 0%, #606060 100%);
+  box-shadow: 0 0 8px rgba(180, 180, 180, 0.5);
+}
+
+.loading-planet-2 {
+  width: 10px;
+  height: 10px;
+  top: -5px;
+  margin-left: -5px;
+  background: radial-gradient(circle, #4a90d9 0%, #2060a0 100%);
+  box-shadow: 0 0 12px rgba(74, 144, 217, 0.6);
+}
+
+.loading-planet-3 {
+  width: 14px;
+  height: 14px;
+  top: -7px;
+  margin-left: -7px;
+  background: radial-gradient(circle, #e6c88a 0%, #c4a060 100%);
+  box-shadow: 0 0 15px rgba(230, 200, 138, 0.5);
+}
+
+/* Loading Text */
+.loading-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.loading-title {
+  font-size: 2rem;
+  font-weight: 300;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #88ccff 0%, #ffffff 50%, #88ccff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s ease-in-out infinite;
+  background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: -100% 0; }
+  50% { background-position: 100% 0; }
+}
+
+.loading-status {
+  font-size: 0.9rem;
+  color: rgba(136, 204, 255, 0.7);
+  letter-spacing: 2px;
+}
+
+.loading-dots::after {
+  content: '';
+  animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0%, 20% { content: ''; }
+  40% { content: '.'; }
+  60% { content: '..'; }
+  80%, 100% { content: '...'; }
+}
+
+/* Loading Progress Bar */
+.loading-progress {
+  width: 200px;
+  height: 2px;
+  background: rgba(100, 150, 255, 0.2);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.loading-progress-bar {
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #88ccff, transparent);
+  animation: progressSlide 1.5s ease-in-out infinite;
+}
+
+@keyframes progressSlide {
+  0% { transform: translateX(-100%); width: 30%; }
+  50% { width: 60%; }
+  100% { transform: translateX(400%); width: 30%; }
 }
 
 /* Planet Labels */
@@ -175,17 +396,54 @@ body {
   color: #fff;
   font-size: 12px;
   font-weight: 500;
-  padding: 4px 10px;
-  background: rgba(0, 0, 20, 0.85);
-  border: 1px solid rgba(100, 150, 255, 0.25);
-  border-radius: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 20, 0.9);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 8px;
   pointer-events: none;
   white-space: nowrap;
   transform: translate(-50%, -100%);
-  margin-top: -10px;
+  margin-top: -12px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 1), 0 0 8px rgba(0, 0, 0, 0.8);
-  letter-spacing: 0.3px;
-  backdrop-filter: blur(4px);
+  letter-spacing: 0.5px;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  animation: labelFadeIn 0.3s ease forwards;
+}
+
+@keyframes labelFadeIn {
+  from { opacity: 0; transform: translate(-50%, -80%); }
+  to { opacity: 1; transform: translate(-50%, -100%); }
+}
+
+.planet-label::before {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(100, 150, 255, 0.3);
+}
+
+.planet-label::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid rgba(0, 0, 20, 0.9);
+}
+
+.planet-label.hovered {
+  background: rgba(20, 40, 80, 0.95);
+  border-color: rgba(100, 150, 255, 0.6);
+  box-shadow: 0 0 20px rgba(100, 150, 255, 0.3);
+  transform: translate(-50%, -100%) scale(1.05);
 }
 
 .dwarf-planet-label {
@@ -193,7 +451,33 @@ body {
   font-weight: 400;
   opacity: 0.85;
   font-style: italic;
-  border-color: rgba(150, 100, 200, 0.25);
+  border-color: rgba(150, 100, 200, 0.3);
+}
+
+.dwarf-planet-label::before {
+  border-top-color: rgba(150, 100, 200, 0.3);
+}
+
+/* Spacecraft Labels */
+.spacecraft-label {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-color: rgba(100, 255, 150, 0.3);
+  background: rgba(0, 20, 10, 0.9);
+}
+
+.spacecraft-label::before {
+  border-top-color: rgba(100, 255, 150, 0.3);
+}
+
+/* Comet Label */
+.comet-label {
+  border-color: rgba(150, 200, 255, 0.4);
+  background: rgba(10, 20, 40, 0.9);
+}
+
+.comet-label::before {
+  border-top-color: rgba(150, 200, 255, 0.4);
 }
 
 /* Time Display */
@@ -202,21 +486,34 @@ body {
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(10, 10, 30, 0.9);
-  border: 1px solid rgba(100, 150, 255, 0.3);
-  border-radius: 12px;
-  padding: 15px 25px;
+  background: linear-gradient(180deg, rgba(15, 20, 45, 0.95) 0%, rgba(8, 12, 30, 0.95) 100%);
+  border: 1px solid rgba(100, 150, 255, 0.25);
+  border-radius: 16px;
+  padding: 18px 30px;
   color: #fff;
   text-align: center;
   z-index: 100;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 8px 32px rgba(0, 50, 150, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+#time-display:hover {
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow:
+    0 12px 40px rgba(0, 50, 150, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .time-date {
-  font-size: 1.2rem;
+  font-size: 1.3rem;
+  font-weight: 300;
   color: #88ccff;
-  margin-bottom: 10px;
-  text-shadow: 0 0 10px rgba(100, 150, 255, 0.5);
+  margin-bottom: 12px;
+  text-shadow: 0 0 15px rgba(100, 150, 255, 0.6);
+  letter-spacing: 1px;
 }
 
 .time-controls {
@@ -424,26 +721,39 @@ body {
   position: fixed;
   bottom: 100px;
   left: 20px;
-  background: rgba(10, 10, 30, 0.9);
-  border: 1px solid rgba(100, 150, 255, 0.3);
-  border-radius: 12px;
-  padding: 10px;
+  background: linear-gradient(135deg, rgba(10, 15, 35, 0.95) 0%, rgba(5, 8, 20, 0.95) 100%);
+  border: 1px solid rgba(100, 150, 255, 0.25);
+  border-radius: 14px;
+  padding: 12px;
   z-index: 100;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 6px 24px rgba(0, 50, 150, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+#minimap-container:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 32px rgba(0, 50, 150, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .minimap-title {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
+  color: rgba(136, 204, 255, 0.8);
+  font-size: 10px;
+  font-weight: 500;
   text-align: center;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
 }
 
 #minimap {
   display: block;
-  border-radius: 8px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 /* Keyboard Shortcuts Help (optional) */

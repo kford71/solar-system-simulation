@@ -6,9 +6,22 @@
  * - Lydian mode for "space wonder" aesthetic
  * - Probabilistic note triggering for non-repetitive patterns
  * - Responds to zone (inner/outer/interstellar) and time warp
+ *
+ * Enhanced with generative techniques (2024-2025):
+ * - Markov chain melodic generation
+ * - Euclidean rhythms for interesting patterns
+ * - Procedural chord progressions
+ * - Tension curves for dynamic response
  */
 
 import * as Tone from 'tone';
+import {
+  MelodyMarkov,
+  EuclideanRhythm,
+  ChordProgressionGenerator,
+  TensionCurve,
+  MotifSystem
+} from './GenerativeMusic.js';
 
 export class MusicSystem {
   constructor(masterGain) {
@@ -32,12 +45,32 @@ export class MusicSystem {
 
     // Volume multiplier
     this.volumeMultiplier = 1;
+
+    // Generative music components
+    this.melodyMarkov = new MelodyMarkov(2); // 2nd order Markov chain
+    this.chordGenerator = new ChordProgressionGenerator();
+    this.tensionCurve = new TensionCurve();
+    this.motifSystem = new MotifSystem();
+
+    // Current chord progression
+    this.currentProgression = [];
+    this.progressionIndex = 0;
+
+    // Euclidean rhythm patterns
+    this.rhythmPatterns = {
+      arpeggio: EuclideanRhythm.generate(5, 16),  // 5 hits in 16 steps
+      bass: EuclideanRhythm.generate(3, 8),       // 3 hits in 8 steps
+      percussion: EuclideanRhythm.generate(4, 12) // 4 hits in 12 steps
+    };
   }
 
   /**
    * Initialize all music layers
    */
   init() {
+    // Initialize generative components
+    this.initGenerativeComponents();
+
     this.createPadLayer();
     this.createArpeggioLayer();
     this.createMelodyLayer();
@@ -46,8 +79,61 @@ export class MusicSystem {
     // Setup transport for synchronized playback
     Tone.Transport.bpm.value = 60;
 
+    // Generate initial chord progression
+    this.generateNewProgression();
+
     // Start with pad only
     this.setIntensity(0.3);
+  }
+
+  /**
+   * Initialize generative music components
+   */
+  initGenerativeComponents() {
+    // Train Markov chain with Lydian patterns
+    this.melodyMarkov.trainLydianPatterns();
+
+    // Add zone-specific patterns
+    const innerPatterns = [
+      ['C4', 'E4', 'G4', 'B4', 'C5', 'B4', 'G4', 'E4'],
+      ['D4', 'F#4', 'A4', 'D5', 'A4', 'F#4'],
+      ['G4', 'B4', 'D5', 'G5', 'D5', 'B4', 'G4'],
+    ];
+    innerPatterns.forEach(p => this.melodyMarkov.train(p));
+
+    // Store some motifs for later use
+    this.motifSystem.store('wonder', ['C4', 'E4', 'G4', 'B4']);
+    this.motifSystem.store('discovery', ['G4', 'A4', 'B4', 'D5', 'C5']);
+    this.motifSystem.store('mystery', ['E4', 'F#4', 'G4', 'F#4', 'E4']);
+  }
+
+  /**
+   * Generate a new chord progression
+   */
+  generateNewProgression() {
+    // Generate 8 chords
+    this.currentProgression = this.chordGenerator.generateWithNotes(8, 'C', 3);
+    this.progressionIndex = 0;
+    console.log('Generated progression:', this.currentProgression.map(c => c.numeral).join(' → '));
+  }
+
+  /**
+   * Get current chord from progression
+   */
+  getCurrentChord() {
+    if (this.currentProgression.length === 0) return null;
+    return this.currentProgression[this.progressionIndex % this.currentProgression.length];
+  }
+
+  /**
+   * Advance to next chord in progression
+   */
+  advanceChord() {
+    this.progressionIndex++;
+    if (this.progressionIndex >= this.currentProgression.length) {
+      // Generate new progression every cycle
+      this.generateNewProgression();
+    }
   }
 
   // ==================== PAD LAYER (Always on) ====================
@@ -125,14 +211,33 @@ export class MusicSystem {
     // Store reference to this for callback
     const self = this;
 
-    // Arpeggio pattern - probabilistic triggering
+    // Step counter for Euclidean rhythm
+    let stepIndex = 0;
+
+    // Arpeggio pattern - using Euclidean rhythm instead of pure probability
     const pattern = new Tone.Loop((time) => {
-      if (Math.random() < 0.25) { // 25% chance per beat
-        const note = self.getRandomNote();
+      const euclideanPattern = self.rhythmPatterns.arpeggio;
+      const shouldPlay = euclideanPattern[stepIndex % euclideanPattern.length];
+
+      // Add some probability on top of Euclidean pattern for variety
+      const tensionProb = 0.2 + self.tensionCurve.getTension() * 0.3;
+
+      if (shouldPlay || Math.random() < tensionProb * 0.3) {
+        // Use Markov chain to generate note, or fall back to random
+        let note;
+        if (self.melodyMarkov && Math.random() < 0.6) {
+          const generated = self.melodyMarkov.generate(1);
+          note = generated[0] || self.getRandomNote();
+        } else {
+          note = self.getRandomNote();
+        }
+
         const velocity = 0.3 + Math.random() * 0.3;
         synth.triggerAttackRelease(note, '4n', time, velocity);
       }
-    }, '4n');
+
+      stepIndex++;
+    }, '16n'); // 16th notes for Euclidean pattern
 
     this.layers.arpeggio = {
       synth,
@@ -140,7 +245,8 @@ export class MusicSystem {
       reverb,
       gain,
       pattern,
-      baseVolume: 0.15
+      baseVolume: 0.15,
+      stepIndex: 0
     };
   }
 
@@ -177,12 +283,60 @@ export class MusicSystem {
     // Store reference to this for callback
     const self = this;
 
-    // Sparse melody - very low probability, high register notes
+    // Track current motif playback
+    let currentMotif = [];
+    let motifIndex = 0;
+    let barsWithoutMotif = 0;
+
+    // Melody pattern - uses motifs and Markov chains
     const pattern = new Tone.Loop((time) => {
-      if (Math.random() < 0.08) { // 8% chance - very sparse
-        // Pick from upper part of scale
-        const upperScale = self.scale.slice(-5);
-        const note = upperScale[Math.floor(Math.random() * upperScale.length)];
+      // Tension affects melody probability
+      const tensionProb = 0.05 + self.tensionCurve.getTension() * 0.15;
+
+      // If we have a motif playing, continue it
+      if (currentMotif.length > 0 && motifIndex < currentMotif.length) {
+        const note = currentMotif[motifIndex];
+        const velocity = 0.4 + Math.random() * 0.2;
+        synth.triggerAttackRelease(note, '2n', time, velocity);
+        motifIndex++;
+
+        if (motifIndex >= currentMotif.length) {
+          currentMotif = [];
+          motifIndex = 0;
+        }
+        return;
+      }
+
+      // Decide whether to start a new motif or play a random note
+      barsWithoutMotif++;
+
+      if (barsWithoutMotif > 8 && Math.random() < 0.3) {
+        // Start a motif variation every ~8 bars
+        const motifNames = ['wonder', 'discovery', 'mystery'];
+        const motifName = motifNames[Math.floor(Math.random() * motifNames.length)];
+        currentMotif = self.motifSystem.getVariation(motifName);
+        motifIndex = 0;
+        barsWithoutMotif = 0;
+
+        if (currentMotif.length > 0) {
+          const note = currentMotif[motifIndex];
+          const velocity = 0.5;
+          synth.triggerAttackRelease(note, '2n', time, velocity);
+          motifIndex++;
+        }
+      } else if (Math.random() < tensionProb) {
+        // Generate a note using Markov chain or random
+        let note;
+        if (self.melodyMarkov && Math.random() < 0.7) {
+          const upperScale = self.scale.slice(-5);
+          const startNote = upperScale[Math.floor(Math.random() * upperScale.length)];
+          const generated = self.melodyMarkov.generate(2, startNote);
+          note = generated[1] || startNote;
+        } else {
+          const upperScale = self.scale.slice(-5);
+          note = upperScale[Math.floor(Math.random() * upperScale.length)];
+        }
+
         const velocity = 0.4 + Math.random() * 0.2;
         synth.triggerAttackRelease(note, '2n', time, velocity);
       }
@@ -228,13 +382,40 @@ export class MusicSystem {
     // Store reference to this for callback
     const self = this;
 
-    // Very sparse bass notes - root notes only
+    // Step counter for Euclidean rhythm
+    let stepIndex = 0;
+    let chordChangeCounter = 0;
+
+    // Bass pattern - uses Euclidean rhythm and follows chord progression
     const pattern = new Tone.Loop((time) => {
-      if (Math.random() < 0.05) { // 5% chance
-        const rootNote = self.scale[0]; // Always root
-        synth.triggerAttackRelease(rootNote, '1n', time, 0.5);
+      const euclideanPattern = self.rhythmPatterns.bass;
+      const shouldPlay = euclideanPattern[stepIndex % euclideanPattern.length];
+
+      if (shouldPlay) {
+        // Get bass note from current chord or use root
+        let bassNote;
+        const currentChord = self.getCurrentChord();
+
+        if (currentChord && currentChord.notes && currentChord.notes.length > 0) {
+          // Use root of current chord, transposed down an octave
+          bassNote = currentChord.notes[0].replace(/\d/, '2'); // Force octave 2
+        } else {
+          bassNote = self.scale[0]; // Default to scale root
+        }
+
+        const velocity = 0.5 + self.tensionCurve.getTension() * 0.2;
+        synth.triggerAttackRelease(bassNote, '1n', time, velocity);
       }
-    }, '1n');
+
+      stepIndex++;
+
+      // Advance chord every 2 bars (8 beats at quarter note resolution)
+      chordChangeCounter++;
+      if (chordChangeCounter >= 8) {
+        self.advanceChord();
+        chordChangeCounter = 0;
+      }
+    }, '4n');
 
     this.layers.bass = {
       synth,
@@ -444,6 +625,62 @@ export class MusicSystem {
   }
 
   /**
+   * Update music system state (call from game loop)
+   * @param {Object} gameState - Current game state
+   */
+  updateFromGameState(gameState) {
+    // Calculate tension from game state
+    const newTension = this.tensionCurve.calculateFromGameState(gameState);
+    this.tensionCurve.setTargetTension(newTension);
+    this.tensionCurve.update();
+
+    // Update intensity to match tension
+    this.setIntensity(0.3 + this.tensionCurve.getTension() * 0.5);
+
+    // Update tempo based on tension
+    const targetTempo = this.tensionCurve.getParameterValue('tempo');
+    if (Math.abs(Tone.Transport.bpm.value - targetTempo) > 2) {
+      Tone.Transport.bpm.rampTo(targetTempo, 4);
+    }
+
+    // Update pad filter based on tension
+    if (this.layers.pad && this.layers.pad.filter) {
+      const filterFreq = this.tensionCurve.getParameterValue('filterCutoff');
+      this.layers.pad.filter.frequency.rampTo(filterFreq, 2);
+    }
+  }
+
+  /**
+   * Regenerate Euclidean patterns with new parameters
+   * @param {string} patternName - Which pattern to regenerate
+   * @param {number} pulses - Number of pulses
+   * @param {number} steps - Number of steps
+   */
+  setEuclideanPattern(patternName, pulses, steps) {
+    if (this.rhythmPatterns[patternName]) {
+      this.rhythmPatterns[patternName] = EuclideanRhythm.generate(pulses, steps);
+      console.log(`Updated ${patternName} Euclidean pattern: ${pulses}/${steps}`);
+    }
+  }
+
+  /**
+   * Get current generative music state for debugging
+   */
+  getGenerativeState() {
+    return {
+      tension: this.tensionCurve.getTension(),
+      tensionParams: this.tensionCurve.getAllParameters(),
+      currentChord: this.getCurrentChord(),
+      progressionIndex: this.progressionIndex,
+      progression: this.currentProgression.map(c => c.numeral),
+      rhythmPatterns: {
+        arpeggio: this.rhythmPatterns.arpeggio.map(b => b ? 'X' : '.').join(''),
+        bass: this.rhythmPatterns.bass.map(b => b ? 'X' : '.').join('')
+      }
+    };
+  }
+
+  /**
    * Cleanup
    */
   dispose() {
@@ -464,5 +701,7 @@ export class MusicSystem {
     });
 
     this.layers = {};
+    this.currentProgression = [];
+    this.progressionIndex = 0;
   }
 }

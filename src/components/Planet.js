@@ -46,13 +46,20 @@ export class Planet {
     this.orbitGroup.name = `${data.name}Orbit`;
     this.axisGroup.name = `${data.name}Axis`;
 
+    // Create orbit line synchronously (doesn't need textures)
+    this.createOrbitLine();
+
+    // CRITICAL: Add axisGroup to orbitGroup synchronously so scene graph is valid
+    // before createSolarSystem() calls getMesh(). The async init() will populate
+    // the axisGroup with meshes, but the parent-child relationship must exist now.
+    this.orbitGroup.add(this.axisGroup);
+
     this.init();
   }
 
   async init() {
     await this.createPlanetMesh();
     this.applyAxialTilt();
-    this.createOrbitLine();
 
     // Create subtle colored glow around all planets for better visibility
     this.createPlanetGlow();
@@ -72,8 +79,7 @@ export class Planet {
     if (this.data.cloudsUrl) {
       await this.createClouds();
     }
-
-    this.orbitGroup.add(this.axisGroup);
+    // Note: orbitGroup.add(axisGroup) is now done in constructor for sync scene graph setup
   }
 
   /**
@@ -1279,7 +1285,10 @@ export class Planet {
 
   getWorldPosition() {
     const position = new THREE.Vector3();
-    this.planetMesh.getWorldPosition(position);
+    // Guard against being called before async init() completes
+    if (this.planetMesh) {
+      this.planetMesh.getWorldPosition(position);
+    }
     return position;
   }
 
@@ -1303,8 +1312,14 @@ export class Planet {
    * Get all clickable objects (planet + moons)
    */
   getClickableObjects() {
-    const objects = [this.planetMesh];
-    this.moons.forEach(moon => objects.push(moon.mesh));
+    const objects = [];
+    // Guard against being called before async init() completes
+    if (this.planetMesh) {
+      objects.push(this.planetMesh);
+    }
+    this.moons.forEach(moon => {
+      if (moon.mesh) objects.push(moon.mesh);
+    });
     return objects;
   }
 
@@ -1312,6 +1327,9 @@ export class Planet {
    * Set planet position for a specific Julian Date using accurate orbital mechanics
    */
   setPositionForDate(julianDate) {
+    // Guard against being called before async init() completes
+    if (!this.planetMesh) return;
+
     this.currentJulianDate = julianDate;
 
     if (this.useAccurateOrbits) {
@@ -1383,6 +1401,9 @@ export class Planet {
    * Update orbital and rotational motion
    */
   update(deltaTime, speedMultiplier = 1, elapsedTime = 0, julianDate = null) {
+    // Guard against being called before async init() completes
+    if (!this.planetMesh) return;
+
     // If Julian Date provided, use accurate orbital positioning
     if (julianDate !== null && this.useAccurateOrbits) {
       this.setPositionForDate(julianDate);
@@ -1402,7 +1423,7 @@ export class Planet {
     this.planetMesh.rotation.y += rotationSpeed * rotationDirection;
 
     // Update sun direction for custom shaders (Earth and Jupiter)
-    if (this.planetMesh.material.uniforms && this.planetMesh.material.uniforms.sunDirection) {
+    if (this.planetMesh.material && this.planetMesh.material.uniforms && this.planetMesh.material.uniforms.sunDirection) {
       // Sun is at origin, so direction from planet to sun
       const sunDir = new THREE.Vector3(-this.planetMesh.position.x, 0, -this.planetMesh.position.z).normalize();
       this.planetMesh.material.uniforms.sunDirection.value.copy(sunDir);

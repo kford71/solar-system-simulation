@@ -39,15 +39,26 @@ import { KuiperBelt } from './components/KuiperBelt.js';
 import { Starfield } from './components/Starfield.js';
 import { Comet } from './components/Comet.js';
 import { Controls } from './components/Controls.js';
-import { PLANET_DATA, DWARF_PLANETS, MAJOR_ASTEROIDS, COMET_DATA } from './data/planetData.js';
+import { SpaceDust } from './components/SpaceDust.js';
+import {
+  PLANET_DATA,
+  DWARF_PLANETS,
+  MAJOR_ASTEROIDS,
+  COMET_DATA,
+  CAMERA_CONFIG,
+  RENDERER_CONFIG,
+  BLOOM_CONFIG,
+  SCENE_CONFIG
+} from './data/planetData.js';
 import { SPACECRAFT_DATA } from './data/spacecraftData.js';
 import { audioManager } from './audio/AudioManager.js';
 
 // Application state
 let scene, camera, renderer, composer;
-let sun, planets, dwarfPlanets, majorAsteroids, spacecraft, asteroidBelt, kuiperBelt, starfield, comet, controls;
+let sun, planets, dwarfPlanets, majorAsteroids, spacecraft, asteroidBelt, kuiperBelt, starfield, comet, controls, spaceDust;
 let clock;
 let textureLoader;
+let animationFrameId = null;
 
 /**
  * Show user-friendly error message
@@ -103,27 +114,44 @@ function checkWebGLSupport() {
  * Global error handler for uncaught errors
  */
 function setupGlobalErrorHandlers() {
+  // Track if app has successfully initialized
+  let appInitialized = false;
+
+  // Mark app as initialized after first successful render
+  const markInitialized = () => {
+    appInitialized = true;
+    window.removeEventListener('click', markInitialized);
+  };
+  // App is considered stable after user interaction
+  window.addEventListener('click', markInitialized, { once: true });
+
   // Handle uncaught errors
   window.onerror = function(message, source, lineno, colno, error) {
     console.error('Uncaught error:', { message, source, lineno, colno, error });
 
     // Don't show UI error for minor issues that don't break the app
-    if (message.includes('ResizeObserver') || message.includes('Script error')) {
+    if (message.includes('ResizeObserver') ||
+        message.includes('Script error') ||
+        message.includes('Loading chunk') ||
+        message.includes('dynamically imported module')) {
       return false;
     }
 
-    // Only show critical errors to users
-    if (renderer && scene) {
+    // Only show critical errors to users if app hasn't initialized
+    if (renderer && scene && appInitialized) {
       // App is running, log but don't interrupt
-      console.warn('Non-critical error occurred:', message);
+      console.warn('Non-critical runtime error:', message);
       return false;
     }
 
-    showErrorMessage(
-      'Something went wrong',
-      'An unexpected error occurred while running the simulation.',
-      true
-    );
+    // Only show error UI if we're still in initialization phase
+    if (!appInitialized) {
+      showErrorMessage(
+        'Something went wrong',
+        'An unexpected error occurred while running the simulation.',
+        true
+      );
+    }
     return false;
   };
 
@@ -133,14 +161,17 @@ function setupGlobalErrorHandlers() {
 
     // Check if it's a texture loading error (non-critical)
     const reason = event.reason?.message || String(event.reason);
-    if (reason.includes('texture') || reason.includes('Failed to load')) {
+    if (reason.includes('texture') ||
+        reason.includes('Failed to load') ||
+        reason.includes('fetch') ||
+        reason.includes('network')) {
       console.warn('Asset loading error (non-critical):', reason);
       event.preventDefault();
       return;
     }
 
     // Only show critical errors during initialization
-    if (!renderer || !scene) {
+    if (!renderer || !scene || !appInitialized) {
       showErrorMessage(
         'Failed to Load',
         'Some resources could not be loaded. Please check your internet connection and try again.',
@@ -192,7 +223,7 @@ async function init() {
  */
 function setupScene() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000008);
+  scene.background = new THREE.Color(SCENE_CONFIG.backgroundColor);
 }
 
 /**
@@ -200,12 +231,13 @@ function setupScene() {
  */
 function setupCamera() {
   camera = new THREE.PerspectiveCamera(
-    60,
+    CAMERA_CONFIG.fov,
     window.innerWidth / window.innerHeight,
-    0.1,
-    3000
+    CAMERA_CONFIG.near,
+    CAMERA_CONFIG.far
   );
-  camera.position.set(30, 20, 50);
+  const { x, y, z } = CAMERA_CONFIG.initialPosition;
+  camera.position.set(x, y, z);
 }
 
 /**
@@ -220,9 +252,24 @@ function setupRenderer() {
     powerPreference: 'high-performance'
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDERER_CONFIG.maxPixelRatio));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = RENDERER_CONFIG.toneMappingExposure;
+
+  // Handle WebGL context loss (GPU crash, memory issues, etc.)
+  canvas.addEventListener('webglcontextlost', (event) => {
+    event.preventDefault();
+    console.warn('WebGL context lost. Attempting to restore...');
+    // Stop animation loop
+    cancelAnimationFrame(animationFrameId);
+  });
+
+  canvas.addEventListener('webglcontextrestored', () => {
+    console.log('WebGL context restored. Reinitializing...');
+    // Reinitialize the scene
+    setupRenderer();
+    animate();
+  });
 
   // Setup postprocessing composer
   composer = new EffectComposer(renderer);
@@ -234,9 +281,9 @@ function setupRenderer() {
   // Bloom pass for sun glow and atmospheres
   const bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.6,    // Bloom strength
-    0.5,    // Radius
-    0.8     // Threshold
+    BLOOM_CONFIG.strength,
+    BLOOM_CONFIG.radius,
+    BLOOM_CONFIG.threshold
   );
   composer.addPass(bloomPass);
 
@@ -310,6 +357,10 @@ async function createSolarSystem() {
   comet = new Comet(COMET_DATA);
   scene.add(comet.getMesh());
   scene.add(comet.getOrbitLine());
+
+  // Create ambient space dust for added depth
+  spaceDust = new SpaceDust({ particleCount: 400, radius: 60 });
+  scene.add(spaceDust.getMesh());
 }
 
 /**
@@ -357,7 +408,7 @@ function setupAudio() {
  * Animation loop
  */
 function animate() {
-  requestAnimationFrame(animate);
+  animationFrameId = requestAnimationFrame(animate);
 
   const deltaTime = clock.getDelta();
   const elapsedTime = clock.getElapsedTime();
@@ -399,6 +450,11 @@ function animate() {
 
   // Update starfield (subtle rotation)
   starfield.update(deltaTime);
+
+  // Update space dust (follows camera)
+  if (spaceDust) {
+    spaceDust.update(deltaTime, camera);
+  }
 
   // Update controls (includes time display, minimap, and event visuals)
   controls.update(deltaTime, elapsedTime);

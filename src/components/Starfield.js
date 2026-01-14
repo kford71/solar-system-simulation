@@ -9,12 +9,17 @@
  */
 
 import * as THREE from 'three';
+import { STARFIELD_CONFIG } from '../data/planetData.js';
+import starfieldVert from '../shaders/starfield.vert?raw';
+import starfieldFrag from '../shaders/starfield.frag?raw';
+import milkywayVert from '../shaders/milkyway.vert?raw';
+import milkywayFrag from '../shaders/milkyway.frag?raw';
 
 export class Starfield {
   constructor(options = {}) {
-    this.starCount = options.starCount || 8000;
-    this.milkyWayStarCount = options.milkyWayStarCount || 6000;
-    this.radius = options.radius || 1000;
+    this.starCount = options.starCount || STARFIELD_CONFIG.defaultStarCount;
+    this.milkyWayStarCount = options.milkyWayStarCount || STARFIELD_CONFIG.defaultMilkyWayCount;
+    this.radius = options.radius || STARFIELD_CONFIG.defaultRadius;
 
     this.group = new THREE.Group();
     this.group.name = 'StarfieldGroup';
@@ -107,56 +112,8 @@ export class Starfield {
       uniforms: {
         time: { value: 0 }
       },
-      vertexShader: `
-        attribute float size;
-        attribute float phase;
-        attribute float twinkleSpeed;
-        attribute vec3 starColor;
-
-        varying vec3 vColor;
-        varying float vPhase;
-        varying float vSpeed;
-
-        void main() {
-          vColor = starColor;
-          vPhase = phase;
-          vSpeed = twinkleSpeed;
-
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-
-          // Size attenuation based on distance
-          gl_PointSize = size * (200.0 / -mvPosition.z);
-          gl_PointSize = clamp(gl_PointSize, 1.0, 6.0);
-
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        uniform float time;
-
-        varying vec3 vColor;
-        varying float vPhase;
-        varying float vSpeed;
-
-        void main() {
-          // Circular point with soft edge
-          vec2 center = gl_PointCoord - 0.5;
-          float dist = length(center);
-          if (dist > 0.5) discard;
-
-          // Soft radial falloff from center
-          float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-
-          // Subtle twinkle effect (not too dramatic)
-          // Range: 0.85 to 1.0 for gentle scintillation
-          float twinkle = 0.85 + 0.15 * sin(time * vSpeed + vPhase);
-
-          // Add slight secondary frequency for more organic feel
-          twinkle *= 0.95 + 0.05 * sin(time * vSpeed * 0.7 + vPhase * 1.3);
-
-          gl_FragColor = vec4(vColor * twinkle, alpha * twinkle);
-        }
-      `,
+      vertexShader: starfieldVert,
+      fragmentShader: starfieldFrag,
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -179,9 +136,9 @@ export class Starfield {
     const phases = new Float32Array(this.milkyWayStarCount);
     const speeds = new Float32Array(this.milkyWayStarCount);
 
-    // Milky Way band parameters
-    const bandWidth = 0.35; // Width of the band in radians
-    const bandTilt = Math.PI / 6; // Tilt angle of the galactic plane
+    // Milky Way band parameters from config
+    const bandWidth = STARFIELD_CONFIG.milkyWayBandWidth;
+    const bandTilt = STARFIELD_CONFIG.milkyWayBandTilt;
 
     // Milky Way has more warm/red stars (older stellar population)
     const milkyWayColors = [
@@ -245,51 +202,8 @@ export class Starfield {
       uniforms: {
         time: { value: 0 }
       },
-      vertexShader: `
-        attribute float size;
-        attribute float phase;
-        attribute float twinkleSpeed;
-        attribute vec3 starColor;
-
-        varying vec3 vColor;
-        varying float vPhase;
-        varying float vSpeed;
-
-        void main() {
-          vColor = starColor;
-          vPhase = phase;
-          vSpeed = twinkleSpeed;
-
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-
-          gl_PointSize = size * (150.0 / -mvPosition.z);
-          gl_PointSize = clamp(gl_PointSize, 0.5, 4.0);
-
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        uniform float time;
-
-        varying vec3 vColor;
-        varying float vPhase;
-        varying float vSpeed;
-
-        void main() {
-          vec2 center = gl_PointCoord - 0.5;
-          float dist = length(center);
-          if (dist > 0.5) discard;
-
-          // Softer falloff for Milky Way stars
-          float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-          alpha *= 0.6; // More transparent overall
-
-          // Very subtle twinkle for distant stars
-          float twinkle = 0.9 + 0.1 * sin(time * vSpeed + vPhase);
-
-          gl_FragColor = vec4(vColor * twinkle, alpha * twinkle);
-        }
-      `,
+      vertexShader: milkywayVert,
+      fragmentShader: milkywayFrag,
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -309,7 +223,7 @@ export class Starfield {
    * Create subtle nebula glow patches along the Milky Way
    */
   createNebulaGlow() {
-    const nebulaCount = 20;
+    const nebulaCount = STARFIELD_CONFIG.nebulaCount;
 
     // Create canvas texture for nebula glow
     const canvas = document.createElement('canvas');
@@ -336,7 +250,7 @@ export class Starfield {
       opacity: 0.3
     });
 
-    const bandTilt = Math.PI / 6;
+    const bandTilt = STARFIELD_CONFIG.milkyWayBandTilt;
 
     for (let i = 0; i < nebulaCount; i++) {
       const sprite = new THREE.Sprite(nebulaMaterial.clone());
