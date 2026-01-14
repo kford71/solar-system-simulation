@@ -103,7 +103,7 @@ A visually impressive 3D solar system simulation built with Three.js and Vite. E
 ## Setup Instructions
 
 ### Prerequisites
-- Node.js (v18 or higher recommended)
+- Node.js (v20.19+ or v22.12+)
 - npm
 
 ### Installation
